@@ -10,6 +10,10 @@ Engage Sign is the first implementation milestone for Engage Support Services' i
 - A protected legal-export endpoint and UI. It creates a ZIP containing available source templates, prepared/presented/final documents, signer and field records, signature events, the audit chain, settings, a manifest, and SHA-256 checksums.
 - Export integrity guards: if a private-storage file is missing or its current hash differs from the recorded hash, the export stops rather than silently creating an incomplete package.
 - A MySQL 8 production schema under `database/mysql/` and generated D1 migrations for the Sites preview.
+- A standard Node/Next.js production runtime for GoDaddy that listens on GoDaddy's assigned port, plus a one-time administrator setup, staff login, database-backed 12-hour sessions, login throttling, same-origin request protection, server-side `admin`/`staff` checks, account disablement, administrator-managed password resets, and authentication audit events.
+- An administrator user-management screen. Complete legal exports are enforced as administrator-only on the server.
+
+For the exact GoDaddy setup sequence, see [`docs/GODADDY_DEPLOYMENT.md`](docs/GODADDY_DEPLOYMENT.md).
 
 ## Form mapping decisions
 
@@ -20,9 +24,9 @@ Engage Sign is the first implementation milestone for Engage Support Services' i
 
 ## Security and deployment boundary
 
-The current Sites build uses D1 and private R2 bindings for a runnable preview. The intended GoDaddy/Node production deployment should use `database/mysql/schema.sql` plus storage outside the public web root. Sensitive values are modeled as encrypted ciphertext with a key-version field; encryption keys must live outside the database.
+The default runtime is now the GoDaddy/Node deployment and uses MySQL plus storage outside the public web root. The earlier Sites/Cloudflare developer commands remain available under the `sites:*` scripts. Sensitive values are modeled as encrypted ciphertext with a key-version field; encryption keys must live outside the database.
 
-The dashboard and legal-export endpoint require authenticated user headers. In production, provision users explicitly and authorize the complete legal export for administrators only. Public recipients use a separate one-time signing-token flow; never give recipients staff accounts.
+The dashboard and legal-export endpoint require an application-owned staff session. Provision users explicitly; only administrators can create/disable users, reset staff passwords, or run the complete legal export. Public recipients will use a separate one-time signing-token flow; never give recipients staff accounts.
 
 ## Implementation to-do
 
@@ -39,16 +43,17 @@ Do not use the system for real signatures or sensitive participant data until th
 
 ### 2. Production authentication and roles
 
-- [ ] Add staff login for the GoDaddy/Node deployment with secure server-side sessions.
-- [ ] Provision the first administrator explicitly; never auto-promote the first visitor.
-- [ ] Enforce the two roles server-side: `admin` and `staff`.
+- [x] Add staff login for the GoDaddy/Node deployment with secure server-side sessions.
+- [x] Provision the first administrator explicitly; never auto-promote the first visitor.
+- [x] Enforce the two roles server-side: `admin` and `staff`.
 - [ ] Restrict users, templates, retention policy, defaults, and full legal exports to administrators.
-- [ ] Add password reset or SSO, account disablement, session expiration, CSRF protection, login throttling, and audit events for authentication changes.
-- [ ] Add an administrator user-management screen.
+- [ ] Add self-service password reset email or SSO. Administrator-managed resets are implemented.
+- [x] Add account disablement, session expiration, same-origin CSRF protection, login throttling, and audit events for authentication changes.
+- [x] Add an administrator user-management screen.
 
 ### 3. Database and private file storage
 
-- [ ] Connect the Node application to MySQL 8 using `database/mysql/schema.sql`.
+- [x] Connect the Node application to MySQL 8 using `database/mysql/schema.sql`.
 - [ ] Add migration execution and rollback procedures for production releases.
 - [ ] Create private storage outside the public web root for templates, prepared PDFs, signatures, final PDFs, and audit certificates.
 - [ ] Add a storage adapter so development can use R2/local storage while production uses the approved private GoDaddy path or object store.
@@ -169,7 +174,9 @@ npm install
 npm run dev
 ```
 
-Use the local Sites sign-in route when prompted. Generate a migration after schema changes with `npm run db:generate`; verify a release with `npm run build`.
+The default local runtime is the same Next.js/Node path used by GoDaddy. Copy `.env.example` to `.env.local`, configure a development MySQL database, import `database/mysql/schema.sql`, and then open `/setup`. Generate a D1 migration for the optional Sites runtime with `npm run db:generate`; verify a GoDaddy release with `npm run build`.
+
+The optional prior Sites preview can still be run with `npm run sites:dev` and built with `npm run sites:build`.
 
 ## Development workflow
 

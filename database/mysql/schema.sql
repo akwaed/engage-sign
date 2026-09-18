@@ -6,10 +6,43 @@ CREATE TABLE users (
   email VARCHAR(320) NOT NULL,
   display_name VARCHAR(160) NOT NULL,
   role ENUM('admin', 'staff') NOT NULL,
-  password_hash VARCHAR(255) NULL,
+  status ENUM('active', 'disabled') NOT NULL DEFAULT 'active',
+  password_hash VARCHAR(255) NOT NULL,
+  failed_login_count INT UNSIGNED NOT NULL DEFAULT 0,
+  locked_until DATETIME(6) NULL,
+  password_changed_at DATETIME(6) NOT NULL,
   created_at DATETIME(6) NOT NULL,
   updated_at DATETIME(6) NOT NULL,
-  UNIQUE KEY users_email_unique (email)
+  UNIQUE KEY users_email_unique (email),
+  KEY users_status_role_idx (status, role)
+) ENGINE=InnoDB;
+
+CREATE TABLE staff_sessions (
+  id CHAR(36) PRIMARY KEY,
+  user_id CHAR(36) NOT NULL,
+  token_hash CHAR(64) NOT NULL,
+  ip_hash CHAR(64) NULL,
+  user_agent TEXT NULL,
+  created_at DATETIME(6) NOT NULL,
+  last_seen_at DATETIME(6) NOT NULL,
+  expires_at DATETIME(6) NOT NULL,
+  revoked_at DATETIME(6) NULL,
+  UNIQUE KEY staff_sessions_token_unique (token_hash),
+  KEY staff_sessions_user_idx (user_id),
+  KEY staff_sessions_expiration_idx (expires_at),
+  CONSTRAINT staff_sessions_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE password_reset_tokens (
+  id CHAR(36) PRIMARY KEY,
+  user_id CHAR(36) NOT NULL,
+  token_hash CHAR(64) NOT NULL,
+  expires_at DATETIME(6) NOT NULL,
+  used_at DATETIME(6) NULL,
+  created_at DATETIME(6) NOT NULL,
+  UNIQUE KEY password_reset_token_unique (token_hash),
+  KEY password_reset_user_idx (user_id),
+  CONSTRAINT password_reset_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE TABLE templates (

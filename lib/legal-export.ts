@@ -24,6 +24,7 @@ export type LegalArchiveInput = {
   createdAt: string;
   requestedBy: { userId: string; email: string };
   templates: TemplateCatalogItem[];
+  staffUsers: unknown[];
   templateRecords: unknown[];
   templateVersions: unknown[];
   templateFields: unknown[];
@@ -51,6 +52,7 @@ export async function buildLegalArchive(
   const entries: Record<string, Uint8Array> = {
     'README.txt': strToU8(readmeText(input)),
     'records/templates.json': jsonBytes(input.templates),
+    'records/staff-users.json': jsonBytes(input.staffUsers),
     'records/database-templates.json': jsonBytes(input.templateRecords),
     'records/template-versions.json': jsonBytes(input.templateVersions),
     'records/template-fields.json': jsonBytes(input.templateFields),
@@ -122,6 +124,7 @@ export async function buildLegalArchive(
         : null,
     counts: {
       templates: input.templates.length,
+      staffUsers: input.staffUsers.length,
       storedTemplateVersions: input.templateVersions.length,
       templateSourceFiles: templateSourceRecords.length,
       envelopes: input.envelopes.length,

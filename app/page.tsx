@@ -10,6 +10,7 @@ import {
   SearchIcon,
   Settings2Icon,
   ShieldCheckIcon,
+  UsersIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -33,7 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { requireChatGPTUser } from '@/app/chatgpt-auth';
+import { requireStaffUser } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,7 +81,7 @@ const navigation = [
 ];
 
 export default async function Home() {
-  const user = await requireChatGPTUser('/');
+  const user = await requireStaffUser('/');
   const initials = user.displayName
     .split(/[\s@._-]+/)
     .filter(Boolean)
@@ -90,7 +91,7 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen bg-[#f7f5f2] text-foreground">
-      <LegalExportWebMcp />
+      {user.role === 'admin' ? <LegalExportWebMcp /> : null}
       <div className="mx-auto grid min-h-screen max-w-[1600px] lg:grid-cols-[244px_minmax(0,1fr)]">
         <aside className="hidden border-r border-white/10 bg-[#241820] px-5 py-6 text-white lg:flex lg:flex-col">
           <div className="flex items-center gap-3 px-2">
@@ -125,6 +126,15 @@ export default async function Home() {
                 ) : null}
               </Link>
             ))}
+            {user.role === 'admin' ? (
+              <Link
+                href="/admin/users"
+                className="flex h-10 items-center gap-3 rounded-lg px-3 text-sm text-white/62 transition-colors hover:bg-white/7 hover:text-white"
+              >
+                <UsersIcon className="size-4" />
+                <span>Users</span>
+              </Link>
+            ) : null}
           </nav>
 
           <div className="mt-auto rounded-xl border border-white/10 bg-white/[0.055] p-4">
@@ -137,13 +147,15 @@ export default async function Home() {
             </p>
           </div>
 
-          <Link
-            href="/#settings"
-            className="mt-3 flex h-10 items-center gap-3 rounded-lg px-3 text-sm text-white/62 hover:bg-white/7 hover:text-white"
-          >
-            <Settings2Icon className="size-4" />
-            Settings
-          </Link>
+          {user.role === 'admin' ? (
+            <Link
+              href="/#settings"
+              className="mt-3 flex h-10 items-center gap-3 rounded-lg px-3 text-sm text-white/62 hover:bg-white/7 hover:text-white"
+            >
+              <Settings2Icon className="size-4" />
+              Settings
+            </Link>
+          ) : null}
         </aside>
 
         <section className="min-w-0">
@@ -169,6 +181,11 @@ export default async function Home() {
               >
                 {initials || 'ES'}
               </div>
+              <form action="/api/auth/logout" method="post">
+                <Button type="submit" variant="ghost" size="sm">
+                  Sign out
+                </Button>
+              </form>
             </div>
           </header>
 
@@ -187,7 +204,7 @@ export default async function Home() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <LegalExportButton />
+                {user.role === 'admin' ? <LegalExportButton /> : null}
                 <Button size="lg" className="bg-[#ed6435] hover:bg-[#d9552a]">
                   <PlusIcon data-icon="inline-start" />
                   Send document
@@ -282,29 +299,43 @@ export default async function Home() {
             </Card>
 
             <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(300px,0.6fr)]">
-              <Card
-                id="archive"
-                className="scroll-mt-6 bg-[#2c2028] text-white ring-0"
-              >
-                <CardHeader>
-                  <CardTitle className="text-white">Legal archive</CardTitle>
-                  <CardDescription className="max-w-xl text-white/58">
-                    Export signed PDFs, document versions, signer evidence,
-                    audit events, and SHA-256 checksums as one portable package.
-                  </CardDescription>
-                  <CardAction>
-                    <ShieldCheckIcon className="size-5 text-[#ff9068]" />
-                  </CardAction>
-                </CardHeader>
-                <CardContent className="flex flex-wrap items-center justify-between gap-4">
-                  <div className="flex items-center gap-4 text-xs text-white/58">
-                    <span>Last export: Never</span>
-                    <span className="h-3 w-px bg-white/15" />
-                    <span>Retention: Forever</span>
-                  </div>
-                  <LegalExportButton placement="card" />
-                </CardContent>
-              </Card>
+              {user.role === 'admin' ? (
+                <Card
+                  id="archive"
+                  className="scroll-mt-6 bg-[#2c2028] text-white ring-0"
+                >
+                  <CardHeader>
+                    <CardTitle className="text-white">Legal archive</CardTitle>
+                    <CardDescription className="max-w-xl text-white/58">
+                      Export signed PDFs, document versions, signer evidence,
+                      audit events, and SHA-256 checksums as one portable
+                      package.
+                    </CardDescription>
+                    <CardAction>
+                      <ShieldCheckIcon className="size-5 text-[#ff9068]" />
+                    </CardAction>
+                  </CardHeader>
+                  <CardContent className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 text-xs text-white/58">
+                      <span>Last export: Never</span>
+                      <span className="h-3 w-px bg-white/15" />
+                      <span>Retention: Forever</span>
+                    </div>
+                    <LegalExportButton placement="card" />
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card id="archive" className="scroll-mt-6">
+                  <CardHeader>
+                    <CardTitle>Signed document archive</CardTitle>
+                    <CardDescription>
+                      Staff retrieval will appear here as document workflows are
+                      completed. Complete legal exports are limited to
+                      administrators.
+                    </CardDescription>
+                  </CardHeader>
+                </Card>
+              )}
 
               <Card id="templates" className="scroll-mt-6">
                 <CardHeader>
@@ -325,20 +356,22 @@ export default async function Home() {
               </Card>
             </div>
 
-            <Card id="settings" className="mt-4 scroll-mt-6">
-              <CardHeader>
-                <CardTitle>Signing policy defaults</CardTitle>
-                <CardDescription>
-                  Applied to new documents unless an administrator overrides
-                  them.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3 sm:grid-cols-3">
-                <ReadinessRow label="Expiration" value="14 days" />
-                <ReadinessRow label="Reminders" value="7, 3, and 1 day" />
-                <ReadinessRow label="Retention" value="Forever" />
-              </CardContent>
-            </Card>
+            {user.role === 'admin' ? (
+              <Card id="settings" className="mt-4 scroll-mt-6">
+                <CardHeader>
+                  <CardTitle>Signing policy defaults</CardTitle>
+                  <CardDescription>
+                    Applied to new documents unless an administrator overrides
+                    them.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-3 sm:grid-cols-3">
+                  <ReadinessRow label="Expiration" value="14 days" />
+                  <ReadinessRow label="Reminders" value="7, 3, and 1 day" />
+                  <ReadinessRow label="Retention" value="Forever" />
+                </CardContent>
+              </Card>
+            ) : null}
           </div>
         </section>
       </div>
