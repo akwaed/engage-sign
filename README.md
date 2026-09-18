@@ -1,4 +1,4 @@
-# Engage Sign — implementation baseline
+# Engage Sign - implementation baseline
 
 Engage Sign is the first implementation milestone for Engage Support Services' internal document-signing workflow. It is intentionally built around the supplied nine-form baseline and a legal-evidence export.
 
@@ -24,13 +24,143 @@ The current Sites build uses D1 and private R2 bindings for a runnable preview. 
 
 The dashboard and legal-export endpoint require authenticated user headers. In production, provision users explicitly and authorize the complete legal export for administrators only. Public recipients use a separate one-time signing-token flow; never give recipients staff accounts.
 
-## Still required before real signatures
+## Implementation to-do
 
-- Template editor coordinates/placeholders and import of the nine source files into private storage.
-- Recipient signing screen, consent text, typed/drawn signature capture, and one-time token lifecycle.
-- Final PDF rendering with signatures and audit certificate baked in.
-- Outlook SMTP sending, reminders, and daily expiration/retention scheduler.
-- Production encryption-key management, explicit staff provisioning, rate limiting, monitoring, and counsel review of consent language and source-document wording.
+Do not use the system for real signatures or sensitive participant data until the release-gate checklist at the end is complete.
+
+### 1. Legal and workflow decisions
+
+- [ ] Have counsel approve the electronic-signature consent text, signer attribution language, audit certificate, retention policy, and legal-export format.
+- [ ] Resolve the apparent title wording in the CA contractor agreement.
+- [ ] Resolve the conflicting written/numeric compensation and duplicate section in the FHP contractor agreement.
+- [ ] Confirm which forms use ordered signing and which allow parallel signing.
+- [ ] Confirm whether the optional second RN evaluator on the competency checklist can sign in parallel.
+- [ ] Choose the production URL, preferably `sign.engagess.co`, and document the DNS/SSL owner.
+
+### 2. Production authentication and roles
+
+- [ ] Add staff login for the GoDaddy/Node deployment with secure server-side sessions.
+- [ ] Provision the first administrator explicitly; never auto-promote the first visitor.
+- [ ] Enforce the two roles server-side: `admin` and `staff`.
+- [ ] Restrict users, templates, retention policy, defaults, and full legal exports to administrators.
+- [ ] Add password reset or SSO, account disablement, session expiration, CSRF protection, login throttling, and audit events for authentication changes.
+- [ ] Add an administrator user-management screen.
+
+### 3. Database and private file storage
+
+- [ ] Connect the Node application to MySQL 8 using `database/mysql/schema.sql`.
+- [ ] Add migration execution and rollback procedures for production releases.
+- [ ] Create private storage outside the public web root for templates, prepared PDFs, signatures, final PDFs, and audit certificates.
+- [ ] Add a storage adapter so development can use R2/local storage while production uses the approved private GoDaddy path or object store.
+- [ ] Encrypt sensitive database values with authenticated encryption and keep encryption keys outside MySQL.
+- [ ] Implement encryption-key versioning and a tested rotation procedure.
+- [ ] Set restrictive filesystem permissions and verify that stored files cannot be fetched by guessing a URL.
+- [ ] Add automatic database and file-storage backups plus a documented restore drill.
+
+### 4. Template import and field mapping
+
+- [ ] Add an administrator workflow to upload DOCX and PDF templates to private storage.
+- [ ] Verify and record a SHA-256 hash whenever a template version is uploaded.
+- [ ] Add merge placeholders to the six Word templates and convert populated versions to PDF.
+- [ ] Build a coordinate mapper for the three scanned PDFs.
+- [ ] Support `admin-fill`, `participant-fill`, `signer`, and `system` fields.
+- [ ] Assign every signature, initials, date, checkbox, and text field to a signer role.
+- [ ] Add template preview, test-fill, version activation, version retirement, and rollback.
+- [ ] Import and validate all nine baseline source files against the hashes in `lib/template-catalog.ts`.
+
+### 5. Document sending and signer routing
+
+- [ ] Build the send-document form with template selection, admin fields, recipients, routing order, expiration, and reminder overrides.
+- [ ] Generate a separate cryptographically random token for each document/signer pair.
+- [ ] Store only token hashes, enforce expiration, and invalidate each token after successful signing.
+- [ ] Exchange URL tokens for short-lived secure cookies so tokens do not remain in browser history or analytics.
+- [ ] Support ordered and parallel signers, including optional signer roles.
+- [ ] Track draft, sent, viewed, partially signed, completed, declined, expired, and voided statuses.
+- [ ] Prevent edits to the document version or assigned fields after the first signer receives it.
+
+### 6. Recipient signing experience
+
+- [ ] Build the public signing page with no staff account requirement.
+- [ ] Show the exact document being signed and require explicit electronic-signature consent.
+- [ ] Support typed and drawn signatures plus initials and assigned participant fields.
+- [ ] Validate required fields and provide an accessible review-before-submit step.
+- [ ] Capture the UTC timestamp, IP address, user agent, consent version, signature method, signer identity, and hash of the exact presented PDF.
+- [ ] Encrypt IP addresses and other sensitive evidence fields at rest.
+- [ ] Make signing submission idempotent and reject expired, voided, reused, or mismatched tokens.
+- [ ] Notify the next signer only after the prior required signer completes when routing is ordered.
+
+### 7. PDF and evidence generation
+
+- [ ] Render admin fields into an immutable prepared PDF before sending.
+- [ ] Save the hash of every prepared, presented, intermediate, and final document version.
+- [ ] Bake signatures and signer-entered fields into the final PDF.
+- [ ] Add a readable audit block or separate certificate showing all signer events and document hashes.
+- [ ] Generate the final archive only after all required signers have completed.
+- [ ] Store the final PDF checksum separately; do not try to embed a file's own checksum inside itself.
+- [ ] Add independent checksum verification and regression tests for every PDF-generation path.
+
+### 8. Outlook SMTP and email delivery
+
+- [ ] Add a production mail adapter, initially using the approved Outlook/Microsoft 365 SMTP account.
+- [ ] Store SMTP host, port, username, credential or OAuth configuration, sender address, and reply-to address in environment secrets - never in Git.
+- [ ] Require encrypted transport and reject invalid certificates.
+- [ ] Create branded templates for initial signing requests, next-signer notifications, reminders, completion notices, expiration, decline, and void events.
+- [ ] Keep signing tokens out of email logs and application error messages.
+- [ ] Record message type, recipient reference, send time, provider response, retry count, and final delivery status in the audit trail.
+- [ ] Add retry/backoff behavior and an administrator view for failed messages.
+- [ ] Verify the sender domain's SPF, DKIM, and DMARC configuration before production use.
+
+### 9. Scheduled jobs
+
+- [ ] Add a daily scheduled job for reminders and unsigned-document expiration.
+- [ ] Make reminders idempotent so the same reminder is never sent twice.
+- [ ] Lock signing links immediately when an envelope expires or is voided.
+- [ ] Implement the retention job with `NULL = keep forever`.
+- [ ] Require an administrator-configured retention period before any purge is possible.
+- [ ] Add a dry-run report, audit event, and backup/export check before destructive retention purges.
+- [ ] Document the GoDaddy cron command and timezone.
+
+### 10. Legal archive and operational backups
+
+- [x] Generate a legal ZIP containing records, audit events, available documents, a manifest, and SHA-256 checksums.
+- [x] Stop the export if a stored file is missing or its checksum has changed.
+- [x] Record the complete ZIP checksum separately from the archive contents.
+- [ ] Add date-range and document-specific export scopes while keeping complete-export support.
+- [ ] Add optional client-side or server-side archive encryption with a separately delivered passphrase.
+- [ ] Store export history and provide a verification screen for previously exported archives.
+- [ ] Test restoring MySQL and private files independently from the legal archive.
+
+### 11. Security and privacy hardening
+
+- [ ] Enforce HTTPS and secure, HTTP-only, same-site cookies in production.
+- [ ] Add security headers, request-size limits, rate limits, input validation, and upload-type validation.
+- [ ] Keep personal data, tokens, signatures, and document contents out of routine logs and analytics.
+- [ ] Add malware scanning or a quarantine process for uploaded templates.
+- [ ] Add dependency and secret scanning to GitHub.
+- [ ] Review access to the sensitive background-authorization fields, especially SSN and date of birth.
+- [ ] Complete a threat model covering token theft, account takeover, replay, document substitution, insider access, and backup exposure.
+- [ ] Run a production security review before enabling external signing links.
+
+### 12. Testing, monitoring, and release
+
+- [ ] Add unit tests for token hashing, audit-chain hashing, encryption, status transitions, reminders, retention, and archive verification.
+- [ ] Add integration tests for MySQL, storage, email, and PDF generation.
+- [ ] Add end-to-end tests for one-signer, ordered two-signer, parallel signer, optional evaluator, expired link, decline, and void flows.
+- [ ] Add accessibility testing for keyboard-only signing and screen readers.
+- [ ] Add monitoring for failed jobs, failed email, storage errors, audit-chain failures, and repeated invalid-token attempts.
+- [ ] Add health checks, structured redacted logs, alerting, and administrator runbooks.
+- [ ] Configure separate development, staging, and production environments with separate databases, storage, credentials, and sender addresses.
+- [ ] Complete a staging signing exercise and archive-verification drill before production launch.
+
+### Production release gate
+
+- [ ] Legal language and source agreements approved.
+- [ ] All nine templates imported, mapped, and visually verified.
+- [ ] Authentication, role enforcement, encryption, private storage, SMTP, and scheduled jobs configured.
+- [ ] All required automated tests pass in GitHub Actions.
+- [ ] Backup restore and legal-archive verification drills pass.
+- [ ] Security review has no unresolved critical or high-risk findings.
+- [ ] A named administrator and operational owner approve production activation.
 
 ## Run locally
 
@@ -40,3 +170,11 @@ npm run dev
 ```
 
 Use the local Sites sign-in route when prompted. Generate a migration after schema changes with `npm run db:generate`; verify a release with `npm run build`.
+
+## Development workflow
+
+1. Create a feature branch from `main`.
+2. Make and test one scoped change.
+3. Run `npm run format`, `npm run lint`, and `npm run build`.
+4. Open a pull request and require the GitHub Actions checks to pass.
+5. Merge only after review; deploy staging before production.
