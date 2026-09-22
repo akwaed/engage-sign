@@ -10,6 +10,18 @@ npm start
 
 `npm start` automatically uses the `PORT` supplied by GoDaddy. Do not use `wrangler dev` for the GoDaddy deployment.
 
+GoDaddy Preview currently invokes `npm run dev`, independently of the production
+start command. The development script explicitly uses `next dev --webpack` because
+the preview sandbox denies the internal process/port operation used by Turbopack
+when compiling CSS. Keep this flag when updating Next.js. Production continues to
+use `npm run build` followed by `npm start`.
+
+After updating Preview, verify the runtime logs show `next dev --webpack`, then
+check `/login` and `/api/health`. A Healthy build badge alone does not establish
+that pages compile or that the database is reachable. If the logs still show a
+working-directory or SWC download error after a fresh deployment, investigate the
+GoDaddy runtime separately; changing the bundler does not repair those conditions.
+
 ## 1. Update the Preview build
 
 1. Push the latest `main` branch to GitHub.
