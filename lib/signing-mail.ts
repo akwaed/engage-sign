@@ -192,10 +192,10 @@ export async function probeSmtpTcp() {
   assertMailConfigured();
   const host = process.env.SMTP_HOST!;
   const port = Number(process.env.SMTP_PORT ?? 587);
-  return new Promise<'connected' | 'timeout' | 'failed'>((resolve) => {
+  return new Promise<string>((resolve) => {
     const socket = createConnection({ host, port });
     let finished = false;
-    const finish = (result: 'connected' | 'timeout' | 'failed') => {
+    const finish = (result: string) => {
       if (finished) return;
       finished = true;
       socket.destroy();
@@ -203,7 +203,11 @@ export async function probeSmtpTcp() {
     };
     socket.setTimeout(5_000, () => finish('timeout'));
     socket.once('connect', () => finish('connected'));
-    socket.once('error', () => finish('failed'));
+    socket.once('error', (error) => {
+      const code = 'code' in error ? String(error.code) : '';
+      finish(/^(ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|ETIMEDOUT|EACCES|EPERM)$/.test(code)
+        ? `failed:${code}` : 'failed');
+    });
   });
 }
 
