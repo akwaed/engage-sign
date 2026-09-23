@@ -1,10 +1,10 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
-import { NextResponse } from 'next/server';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
 import { appendAuditEvent } from '@/lib/audit';
 import { hashPassword, validatePassword } from '@/lib/auth/password';
 import { formText } from '@/lib/form-data';
+import { redirectToLocalPath } from '@/lib/http-response';
 import { getMysqlPool } from '@/lib/mysql';
 import {
   assertSameOrigin,
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
   } catch {
-    return redirectError(request, 'request');
+    return redirectError('request');
   }
   const form = await request.formData();
   const displayName = formText(form, 'displayName').trim().slice(0, 160);
@@ -26,11 +26,10 @@ export async function POST(request: Request) {
   const password = formText(form, 'password');
   const suppliedToken = formText(form, 'setupToken');
   const expectedToken = process.env.SETUP_TOKEN ?? '';
-  if (!displayName || !email.includes('@'))
-    return redirectError(request, 'invalid');
-  if (validatePassword(password)) return redirectError(request, 'password');
+  if (!displayName || !email.includes('@')) return redirectError('invalid');
+  if (validatePassword(password)) return redirectError('password');
   if (!expectedToken || !safeEqual(suppliedToken, expectedToken))
-    return redirectError(request, 'token');
+    return redirectError('token');
 
   const pool = getMysqlPool();
   const connection = await pool.getConnection();
@@ -44,8 +43,7 @@ export async function POST(request: Request) {
     const [existing] = await connection.query<
       Array<RowDataPacket & { total: number }>
     >('SELECT COUNT(*) AS total FROM users');
-    if (Number(existing[0]?.total ?? 0) > 0)
-      return redirectError(request, 'exists');
+    if (Number(existing[0]?.total ?? 0) > 0) return redirectError('exists');
     userId = randomUUID();
     const passwordHash = await hashPassword(password);
     await connection.execute<ResultSetHeader>(
@@ -70,10 +68,7 @@ export async function POST(request: Request) {
     ipHash: hashClientIp(getClientIp(request)),
     userAgent: request.headers.get('user-agent'),
   });
-  return NextResponse.redirect(
-    new URL('/login?setup=complete', request.url),
-    303,
-  );
+  return redirectToLocalPath('/login?setup=complete');
 }
 
 function safeEqual(left: string, right: string) {
@@ -81,9 +76,6 @@ function safeEqual(left: string, right: string) {
   const b = createHash('sha256').update(right).digest();
   return timingSafeEqual(a, b);
 }
-function redirectError(request: Request, error: string) {
-  return NextResponse.redirect(
-    new URL(`/setup?error=${error}`, request.url),
-    303,
-  );
+function redirectError(error: string) {
+  return redirectToLocalPath(`/setup?error=${encodeURIComponent(error)}`);
 }

@@ -1,11 +1,10 @@
-import { NextResponse } from 'next/server';
-
 import { appendAuditEvent } from '@/lib/audit';
 import {
   expiredSessionCookie,
   getStaffUser,
   revokeCurrentSession,
 } from '@/lib/auth/session';
+import { redirectToLocalPath } from '@/lib/http-response';
 import {
   assertSameOrigin,
   getClientIp,
@@ -28,7 +27,7 @@ export async function POST(request: Request) {
       ipHash: hashClientIp(getClientIp(request)),
       userAgent: request.headers.get('user-agent'),
     });
-  const response = NextResponse.redirect(new URL('/login', request.url), 303);
+  const response = redirectToLocalPath('/login');
   response.cookies.set(expiredSessionCookie());
   return response;
 }
