@@ -6,11 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 export async function convertDocxToPdf(bytes: Uint8Array) {
-  const executable = process.env.LIBREOFFICE_BIN;
-  if (!executable)
-    throw new Error(
-      'DOCX PDF conversion requires LIBREOFFICE_BIN on this host.',
-    );
+  const executable = process.env.LIBREOFFICE_BIN?.trim() || 'soffice';
   const directory = await mkdtemp(join(tmpdir(), 'engage-docx-'));
   try {
     const source = join(directory, 'input.docx');
@@ -34,7 +30,13 @@ export async function convertDocxToPdf(bytes: Uint8Array) {
       const timer = setTimeout(() => child.kill(), 60_000);
       child.on('error', (error) => {
         clearTimeout(timer);
-        reject(error);
+        reject(
+          'code' in error && error.code === 'ENOENT'
+            ? new Error(
+                'LibreOffice is unavailable on this host. Install soffice or set LIBREOFFICE_BIN to its absolute path.',
+              )
+            : error,
+        );
       });
       child.on('close', (code) => {
         clearTimeout(timer);

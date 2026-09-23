@@ -74,9 +74,9 @@ Do not use the system for real signatures or sensitive participant data until th
 - [x] Assign every generated Word placeholder and scanned-PDF overlay field to a signer role in draft field maps.
 - [x] Add administrator-only source/PDF preview, PDF test-fill, version activation, version retirement, and rollback controls.
 - [ ] Configure and verify DOCX-to-PDF conversion on the deployment host for Word preview and test-fill.
-- [ ] Import and validate all nine baseline source files against the hashes in `lib/template-catalog.ts`.
+- [x] Import and validate all nine baseline source files against the hashes in `lib/template-catalog.ts`.
 
-The nine source files are kept outside this repository in the sibling `engage docs` folder. All nine local SHA-256 hashes match the catalog. The repository script generates six private draft DOCX revisions and role-assigned JSON maps under ignored `work/revised/`; the three scanned PDFs have role-assigned draft coordinate maps. These files have **not** been imported into GoDaddy private storage, and no version has been activated. The first upload for each catalog entry must match its recorded baseline hash. A headless LibreOffice binary is still required on the application host to render Word previews and test PDFs. See [`docs/TEMPLATE_WORKFLOW.md`](docs/TEMPLATE_WORKFLOW.md).
+The nine source files are kept outside this repository in the sibling `engage docs` folder. All nine exact baselines were hash-checked and imported into GoDaddy Preview private storage. Six Word revisions and their role-assigned field maps were also uploaded; the three scanned PDFs have saved coordinate maps. A scanned-PDF test-fill generated successfully. No version has been activated. GoDaddy Preview could not convert a Word test-fill because LibreOffice was unavailable or not configured; Word rendering and visual approval remain release gates. The CA and FHP wording also needs content review. See [`docs/TEMPLATE_WORKFLOW.md`](docs/TEMPLATE_WORKFLOW.md).
 
 ### 5. Document sending and signer routing
 
@@ -111,8 +111,8 @@ The nine source files are kept outside this repository in the sibling `engage do
 
 ### 8. Outlook SMTP and email delivery
 
-- [x] Add an SMTP mail adapter for the approved Outlook/Microsoft 365 account; host credentials are still required.
-- [ ] Store SMTP host, port, username, credential or OAuth configuration, sender address, and reply-to address in environment secrets - never in Git.
+- [x] Add an SMTP mail adapter for the approved Outlook/Microsoft 365 account.
+- [x] Store SMTP host, port, username, credential, sender address, and reply-to address in GoDaddy Preview secrets - never in Git. SMTP delivery still needs a live test, and Published secrets are separate.
 - [x] Require encrypted transport and reject invalid certificates.
 - [ ] Create branded templates for initial signing requests, next-signer notifications, reminders, completion notices, expiration, decline, and void events.
 - [ ] Keep signing tokens out of email logs and application error messages.
