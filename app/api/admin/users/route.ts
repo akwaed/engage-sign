@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { NextResponse } from 'next/server';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
 import { appendAuditEvent } from '@/lib/audit';
 import { hashPassword, validatePassword } from '@/lib/auth/password';
 import { getStaffUser } from '@/lib/auth/session';
 import { getMysqlPool } from '@/lib/mysql';
+import { redirectToLocalPath } from '@/lib/http-response';
 import { formText } from '@/lib/form-data';
 import {
   assertSameOrigin,
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
   } catch {
-    return redirectResult(request, 'error', 'request');
+    return redirectResult('error', 'request');
   }
   const actor = await getStaffUser();
   if (!actor || actor.role !== 'admin')
@@ -37,9 +37,9 @@ export async function POST(request: Request) {
       const role = form.get('role') === 'admin' ? 'admin' : 'staff';
       const password = formText(form, 'password');
       if (!email.includes('@') || !displayName)
-        return redirectResult(request, 'error', 'invalid');
+        return redirectResult('error', 'invalid');
       if (validatePassword(password))
-        return redirectResult(request, 'error', 'password');
+        return redirectResult('error', 'password');
       const id = randomUUID();
       await getMysqlPool().execute<ResultSetHeader>(
         `INSERT INTO users (id, email, display_name, role, status, password_hash, failed_login_count, locked_until, password_changed_at, created_at, updated_at)
@@ -54,13 +54,13 @@ export async function POST(request: Request) {
         ipHash,
         userAgent,
       });
-      return redirectResult(request, 'message', 'created');
+      return redirectResult('message', 'created');
     }
 
     const userId = formText(form, 'userId');
-    if (!userId) return redirectResult(request, 'error', 'invalid');
+    if (!userId) return redirectResult('error', 'invalid');
     if (action === 'disable') {
-      if (userId === actor.id) return redirectResult(request, 'error', 'self');
+      if (userId === actor.id) return redirectResult('error', 'self');
       const [targetRows] = await getMysqlPool().query<
         Array<RowDataPacket & { role: 'admin' | 'staff' }>
       >('SELECT role FROM users WHERE id = ? LIMIT 1', [userId]);
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
           "SELECT COUNT(*) AS total FROM users WHERE role = 'admin' AND status = 'active'",
         );
         if (Number(countRows[0]?.total ?? 0) <= 1)
-          return redirectResult(request, 'error', 'last_admin');
+          return redirectResult('error', 'last_admin');
       }
       await getMysqlPool().execute<ResultSetHeader>(
         "UPDATE users SET status = 'disabled', updated_at = UTC_TIMESTAMP(6) WHERE id = ?",
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
         ipHash,
         userAgent,
       });
-      return redirectResult(request, 'message', 'disabled');
+      return redirectResult('message', 'disabled');
     }
     if (action === 'enable') {
       await getMysqlPool().execute<ResultSetHeader>(
@@ -104,12 +104,12 @@ export async function POST(request: Request) {
         ipHash,
         userAgent,
       });
-      return redirectResult(request, 'message', 'enabled');
+      return redirectResult('message', 'enabled');
     }
     if (action === 'reset_password') {
       const password = formText(form, 'password');
       if (validatePassword(password))
-        return redirectResult(request, 'error', 'password');
+        return redirectResult('error', 'password');
       await getMysqlPool().execute<ResultSetHeader>(
         'UPDATE users SET password_hash = ?, password_changed_at = UTC_TIMESTAMP(6), failed_login_count = 0, locked_until = NULL, updated_at = UTC_TIMESTAMP(6) WHERE id = ?',
         [await hashPassword(password), userId],
@@ -126,9 +126,9 @@ export async function POST(request: Request) {
         ipHash,
         userAgent,
       });
-      return redirectResult(request, 'message', 'password');
+      return redirectResult('message', 'password');
     }
-    return redirectResult(request, 'error', 'invalid');
+    return redirectResult('error', 'invalid');
   } catch (error) {
     const code =
       typeof error === 'object' &&
@@ -137,16 +137,11 @@ export async function POST(request: Request) {
       error.code === 'ER_DUP_ENTRY'
         ? 'duplicate'
         : 'save';
-    return redirectResult(request, 'error', code);
+    return redirectResult('error', code);
   }
 }
 
-function redirectResult(
-  request: Request,
-  kind: 'message' | 'error',
-  value: string,
-) {
-  const url = new URL('/admin/users', request.url);
-  url.searchParams.set(kind, value);
-  return NextResponse.redirect(url, 303);
+function redirectResult(kind: 'message' | 'error', value: string) {
+  const query = new URLSearchParams({ [kind]: value });
+  return redirectToLocalPath(`/admin/users?${query.toString()}`);
 }

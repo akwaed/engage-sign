@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
 import { appendAuditEvent } from '@/lib/audit';
@@ -11,6 +10,7 @@ import {
 } from '@/lib/auth/session';
 import { getMysqlPool } from '@/lib/mysql';
 import { formText } from '@/lib/form-data';
+import { redirectToLocalPath } from '@/lib/http-response';
 import {
   assertSameOrigin,
   getClientIp,
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
   } catch {
-    return errorRedirect(request, 'request', '/');
+    return errorRedirect('request', '/');
   }
   const form = await request.formData();
   const email = formText(form, 'email').trim().toLowerCase().slice(0, 320);
@@ -43,13 +43,12 @@ export async function POST(request: Request) {
   );
   const row = rows[0];
   const now = Date.now();
-  if (row?.status === 'disabled')
-    return errorRedirect(request, 'disabled', returnTo);
+  if (row?.status === 'disabled') return errorRedirect('disabled', returnTo);
   if (
     row?.locked_until &&
     new Date(`${row.locked_until.replace(' ', 'T')}Z`).getTime() > now
   )
-    return errorRedirect(request, 'locked', returnTo);
+    return errorRedirect('locked', returnTo);
 
   const valid = row
     ? await verifyPassword(password, row.password_hash)
@@ -63,7 +62,6 @@ export async function POST(request: Request) {
       );
     }
     return errorRedirect(
-      request,
       row && Number(row.failed_login_count) + 1 >= 5 ? 'locked' : 'invalid',
       returnTo,
     );
@@ -93,14 +91,15 @@ export async function POST(request: Request) {
     ipHash,
     userAgent: request.headers.get('user-agent'),
   });
-  const response = NextResponse.redirect(new URL(returnTo, request.url), 303);
+  const response = redirectToLocalPath(returnTo);
   response.cookies.set(sessionCookie(session.token, session.expiresAt));
   return response;
 }
 
-function errorRedirect(request: Request, error: string, returnTo: string) {
-  const url = new URL('/login', request.url);
-  url.searchParams.set('error', error);
-  url.searchParams.set('return_to', safeReturnTo(returnTo));
-  return NextResponse.redirect(url, 303);
+function errorRedirect(error: string, returnTo: string) {
+  const query = new URLSearchParams({
+    error,
+    return_to: safeReturnTo(returnTo),
+  });
+  return redirectToLocalPath(`/login?${query.toString()}`);
 }
