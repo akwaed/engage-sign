@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
   } catch {
-    return errorRedirect('request', '/');
+    return errorRedirect(request, 'request', '/');
   }
   const form = await request.formData();
   const email = formText(form, 'email').trim().toLowerCase().slice(0, 320);
@@ -43,12 +43,13 @@ export async function POST(request: Request) {
   );
   const row = rows[0];
   const now = Date.now();
-  if (row?.status === 'disabled') return errorRedirect('disabled', returnTo);
+  if (row?.status === 'disabled')
+    return errorRedirect(request, 'disabled', returnTo);
   if (
     row?.locked_until &&
     new Date(`${row.locked_until.replace(' ', 'T')}Z`).getTime() > now
   )
-    return errorRedirect('locked', returnTo);
+    return errorRedirect(request, 'locked', returnTo);
 
   const valid = row
     ? await verifyPassword(password, row.password_hash)
@@ -62,6 +63,7 @@ export async function POST(request: Request) {
       );
     }
     return errorRedirect(
+      request,
       row && Number(row.failed_login_count) + 1 >= 5 ? 'locked' : 'invalid',
       returnTo,
     );
@@ -91,15 +93,15 @@ export async function POST(request: Request) {
     ipHash,
     userAgent: request.headers.get('user-agent'),
   });
-  const response = redirectToLocalPath(returnTo);
+  const response = redirectToLocalPath(request, returnTo);
   response.cookies.set(sessionCookie(session.token, session.expiresAt));
   return response;
 }
 
-function errorRedirect(error: string, returnTo: string) {
+function errorRedirect(request: Request, error: string, returnTo: string) {
   const query = new URLSearchParams({
     error,
     return_to: safeReturnTo(returnTo),
   });
-  return redirectToLocalPath(`/login?${query.toString()}`);
+  return redirectToLocalPath(request, `/login?${query.toString()}`);
 }
