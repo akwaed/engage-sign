@@ -120,7 +120,7 @@ The nine source files are kept outside this repository in the sibling `engage do
 - [x] Add retry/backoff behavior and an administrator view for failed messages.
 - [ ] Verify the sender domain's SPF, DKIM, and DMARC configuration before production use.
 
-The completed-document archive contains every prepared, presented, intermediate, and final PDF, a signer-event certificate, and a checksum manifest. MySQL stores the final PDF and ZIP hashes separately. Mail delivery can be checked and run from `/admin/mail`; the SMTP connection test does not send a message. Production delivery still needs a real test after migration 003 is applied. Public DNS for `engagess.co` has an SPF chain that includes Microsoft 365, but the Microsoft DKIM selector records and `_dmarc` TXT record were absent on 2026-09-23. Domain authentication remains a production release gate.
+The completed-document archive contains every prepared, presented, intermediate, and final PDF, a signer-event certificate, and a checksum manifest. MySQL stores the final PDF and ZIP hashes separately. Mail delivery can be checked and run from `/admin/mail`; the SMTP connection test does not send a message. Migration 003 is applied to the shared GoDaddy database. Preview's SMTP connection test currently fails before authentication with `ESOCKET; stage CONN; TCP failed:EACCES`; GoDaddy must confirm outbound TCP 587 access or an approved alternative before a real delivery test. Public DNS for `engagess.co` has an SPF chain that includes Microsoft 365, but the Microsoft DKIM selector records and `_dmarc` TXT record were absent on 2026-09-23. Domain authentication remains a production release gate.
 
 ### 9. Scheduled jobs
 
