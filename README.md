@@ -76,7 +76,7 @@ Do not use the system for real signatures or sensitive participant data until th
 - [ ] Configure and verify DOCX-to-PDF conversion on the deployment host for Word preview and test-fill.
 - [x] Import and validate all nine baseline source files against the hashes in `lib/template-catalog.ts`.
 
-The nine source files are kept outside this repository in the sibling `engage docs` folder. All nine exact baselines were hash-checked and imported into GoDaddy Preview private storage. Six Word revisions and their role-assigned field maps were also uploaded; the three scanned PDFs have saved coordinate maps. A scanned-PDF test-fill generated successfully. No version has been activated. GoDaddy Preview could not convert a Word test-fill because LibreOffice was unavailable or not configured; Word rendering and visual approval remain release gates. The CA and FHP wording also needs content review. See [`docs/TEMPLATE_WORKFLOW.md`](docs/TEMPLATE_WORKFLOW.md).
+The nine source files are kept outside this repository in the sibling `engage docs` folder. All nine exact baselines were hash-checked and imported into GoDaddy Preview private storage. Six Word revisions and their role-assigned field maps were also uploaded; the three scanned PDFs have saved coordinate maps. A scanned-PDF test-fill generated successfully. No version has been activated. GoDaddy Preview could not convert a Word test-fill: `soffice` is absent from the host's `PATH`. Word rendering and visual approval remain release gates. The CA and FHP wording also needs content review. See [`docs/TEMPLATE_WORKFLOW.md`](docs/TEMPLATE_WORKFLOW.md).
 
 ### 5. Document sending and signer routing
 
