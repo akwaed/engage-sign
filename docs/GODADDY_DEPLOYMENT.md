@@ -43,10 +43,9 @@ DB_PASSWORD
 
 Do not copy or override those values.
 
-1. Open **Settings → Hosted Database**.
-2. Select **Import SQL**.
-3. Upload `database/mysql/schema.sql` from this repository.
-4. When the import completes, use **Browse tables** and confirm that `users`, `staff_sessions`, `audit_events`, and the other baseline tables exist.
+For a new, empty database, import `database/mysql/schema.sql`. For an existing database, **do not import a migration alone**: GoDaddy's importer drops all existing tables before running the uploaded SQL. Use **Export SQL** with each table set to **Everything**, verify that the download contains the expected `CREATE TABLE` and `INSERT INTO` statements, append the required migrations in order, then import the complete file. Keep the untouched export for recovery. After import, use **Browse tables** to verify the full table count, required columns, and administrator row.
+
+GoDaddy's granular exporter produced malformed JSON in the September 23 backup: object columns became `'[object Object]'` and the reminder array became `'7,3,1'`. MySQL rejects these literals. Correct them in a *copy* of the export (`'{}'` and `'[7,3,1]'` respectively), inspect every changed value, and validate the import. The original object contents are not recoverable from that export. A failed import can leave only the tables reached before the error, so restore the complete corrected file before using the app.
 
 Preview and Published currently share this hosted database. Treat Preview as sensitive after real records are added.
 
@@ -117,6 +116,10 @@ Word preview and test-fill use LibreOffice. Set `LIBREOFFICE_BIN` to the host's 
 
 Apply `database/mysql/migrations/002_signing_workflow.sql` after the template migration. On GoDaddy, append both migrations in order to the verified full SQL export and import that combined file once; verify the existing administrator row and new columns/tables afterward. Configure `ENCRYPTION_KEY_V1` and SMTP secrets in Preview before sending a test invitation. Preview and Published currently share the hosted database; use test identities and a separated database before handling real participant data. See [`SIGNING_WORKFLOW.md`](SIGNING_WORKFLOW.md) for the full flow and remaining release checks.
 
-### Current Preview release blockers (2026-09-23)
+### Current Preview release status (2026-09-23)
 
-The GoDaddy project is connected to GitHub `main`; the template and signing workflows are on feature branches. The app has not been published live. A full export was verified on 2026-09-23: it contains definitions for all 14 existing tables and row inserts for the five tables with data, including the administrator. GoDaddy's export switch has a misleading accessibility label: visually, blue and positioned toward **Everything** includes rows; the opposite position creates a schema-only file. The verified original is in the local Downloads folder with SHA-256 `4D8891287BC078C3BAD799CDC82E431AF29DEC2BA7A30402E9780864B59598E2`. Keep it outside Git. The nine baseline templates have not been imported and activated. Complete the Preview migration, encryption and mail secrets, and runtime checks before switching GitHub Sync to the feature branch.
+GoDaddy Preview is connected to `codex/signing-workflow` at commit `51f31c5`. Its build and site status are Healthy/OK, and the runtime log shows `next start` ready. The shared hosted database has 16 tables after applying migrations 001 and 002; the original administrator row remains active, and the `template_versions.lifecycle` and `envelopes.routing_mode` columns were verified. The app has not been published live.
+
+The untouched, granular 14-table export is in the local Downloads folder with SHA-256 `4D8891287BC078C3BAD799CDC82E431AF29DEC2BA7A30402E9780864B59598E2`. GoDaddy's export switch has a misleading accessibility label: visually, blue and positioned toward **Everything** includes rows; the opposite position creates a schema-only file. The corrected 16-table import copy is under ignored `work/deployment/` with SHA-256 `040899BA5EED9F3AFA1F2EBEC8060379420D3C9AAD1253ABBFD23532D337FC88`. Neither SQL file belongs in Git. Four audit-event detail objects and one legal-export scope object were replaced with empty JSON objects because GoDaddy's export had already discarded their contents.
+
+Preview secrets now include `ENCRYPTION_KEY_V1` and the non-secret Microsoft 365 SMTP values. The SMTP password must be entered directly in GoDaddy Secrets by the account owner. The encryption key has a machine-protected local backup under ignored `work/deployment/`. The nine baseline templates have not been imported or activated; DOCX conversion on GoDaddy is unverified. The Preview health endpoint and signing flow still need an end-to-end check. Preview and Published share the same database, so do not send real participant data or publish live until the production release gate passes.
