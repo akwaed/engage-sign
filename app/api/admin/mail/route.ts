@@ -1,5 +1,6 @@
 import { getStaffUser } from '@/lib/auth/session';
 import { expireDueEnvelopes } from '@/lib/envelope-expiration';
+import { safeErrorCode } from '@/lib/mail-security';
 import { assertSameOrigin } from '@/lib/request-security';
 import {
   dispatchNotifications,
@@ -23,8 +24,17 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as { action?: string; envelopeId?: string };
     if (body.action === 'verify') {
-      await verifyMailConnection();
-      return Response.json({ ok: true, message: 'SMTP connection and authentication succeeded.' });
+      try {
+        await verifyMailConnection();
+        return Response.json({ ok: true, message: 'SMTP connection and authentication succeeded.' });
+      } catch (error) {
+        const code = safeErrorCode(error);
+        const status = error && typeof error === 'object' && 'responseCode' in error
+          ? Number(error.responseCode) : null;
+        return Response.json({
+          error: `SMTP verification failed (${code}${Number.isInteger(status) ? `, status ${status}` : ''}).`,
+        }, { status: 502 });
+      }
     }
     if (body.action === 'retry') {
       if (!/^[a-f0-9-]{36}$/i.test(body.envelopeId ?? ''))
