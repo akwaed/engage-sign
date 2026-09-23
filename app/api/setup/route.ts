@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   try {
     assertSameOrigin(request);
   } catch {
-    return redirectError('request');
+    return redirectError(request, 'request');
   }
   const form = await request.formData();
   const displayName = formText(form, 'displayName').trim().slice(0, 160);
@@ -26,10 +26,11 @@ export async function POST(request: Request) {
   const password = formText(form, 'password');
   const suppliedToken = formText(form, 'setupToken');
   const expectedToken = process.env.SETUP_TOKEN ?? '';
-  if (!displayName || !email.includes('@')) return redirectError('invalid');
-  if (validatePassword(password)) return redirectError('password');
+  if (!displayName || !email.includes('@'))
+    return redirectError(request, 'invalid');
+  if (validatePassword(password)) return redirectError(request, 'password');
   if (!expectedToken || !safeEqual(suppliedToken, expectedToken))
-    return redirectError('token');
+    return redirectError(request, 'token');
 
   const pool = getMysqlPool();
   const connection = await pool.getConnection();
@@ -43,7 +44,8 @@ export async function POST(request: Request) {
     const [existing] = await connection.query<
       Array<RowDataPacket & { total: number }>
     >('SELECT COUNT(*) AS total FROM users');
-    if (Number(existing[0]?.total ?? 0) > 0) return redirectError('exists');
+    if (Number(existing[0]?.total ?? 0) > 0)
+      return redirectError(request, 'exists');
     userId = randomUUID();
     const passwordHash = await hashPassword(password);
     await connection.execute<ResultSetHeader>(
@@ -68,7 +70,7 @@ export async function POST(request: Request) {
     ipHash: hashClientIp(getClientIp(request)),
     userAgent: request.headers.get('user-agent'),
   });
-  return redirectToLocalPath('/login?setup=complete');
+  return redirectToLocalPath(request, '/login?setup=complete');
 }
 
 function safeEqual(left: string, right: string) {
@@ -76,6 +78,9 @@ function safeEqual(left: string, right: string) {
   const b = createHash('sha256').update(right).digest();
   return timingSafeEqual(a, b);
 }
-function redirectError(error: string) {
-  return redirectToLocalPath(`/setup?error=${encodeURIComponent(error)}`);
+function redirectError(request: Request, error: string) {
+  return redirectToLocalPath(
+    request,
+    `/setup?error=${encodeURIComponent(error)}`,
+  );
 }
