@@ -178,7 +178,7 @@ export async function dispatchNotifications(limit = 10) {
 
 export async function verifyMailConnection() {
   assertMailConfigured();
-  const transporter = createTransport();
+  const transporter = createTransport(true);
   try {
     await transporter.verify();
     return true;
@@ -187,7 +187,7 @@ export async function verifyMailConnection() {
   }
 }
 
-function createTransport() {
+function createTransport(verificationOnly = false) {
   const port = Number(process.env.SMTP_PORT ?? 587);
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
@@ -196,9 +196,9 @@ function createTransport() {
     requireTLS: true,
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD },
     tls: { rejectUnauthorized: true, minVersion: 'TLSv1.2' },
-    connectionTimeout: 15_000,
-    greetingTimeout: 15_000,
-    socketTimeout: 30_000,
+    connectionTimeout: verificationOnly ? 5_000 : 15_000,
+    greetingTimeout: verificationOnly ? 5_000 : 15_000,
+    socketTimeout: verificationOnly ? 8_000 : 30_000,
     logger: false,
     debug: false,
   });

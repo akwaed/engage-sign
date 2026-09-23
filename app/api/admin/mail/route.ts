@@ -25,12 +25,15 @@ export async function POST(request: Request) {
     const body = (await request.json()) as { action?: string; envelopeId?: string };
     if (body.action === 'verify') {
       try {
+        console.info('SMTP_VERIFY_START');
         await verifyMailConnection();
+        console.info('SMTP_VERIFY_OK');
         return Response.json({ ok: true, message: 'SMTP connection and authentication succeeded.' });
       } catch (error) {
         const code = safeErrorCode(error);
         const status = error && typeof error === 'object' && 'responseCode' in error
           ? Number(error.responseCode) : null;
+        console.warn(`SMTP_VERIFY_FAILED code=${code} status=${Number.isInteger(status) ? status : 'none'}`);
         return Response.json({
           error: `SMTP verification failed (${code}${Number.isInteger(status) ? `, status ${status}` : ''}).`,
         }, { status: 502 });
