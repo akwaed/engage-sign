@@ -6,6 +6,7 @@ import {
   FileSignatureIcon,
   FilesIcon,
   LayoutDashboardIcon,
+  MailIcon,
   PlusIcon,
   SearchIcon,
   Settings2Icon,
@@ -136,6 +137,15 @@ export default async function Home() {
                 ) : null}
               </Link>
             ))}
+            {user.role === 'admin' ? (
+              <Link
+                href="/admin/mail"
+                className="flex h-10 items-center gap-3 rounded-lg px-3 text-sm text-white/62 transition-colors hover:bg-white/7 hover:text-white"
+              >
+                <MailIcon className="size-4" />
+                <span>Email delivery</span>
+              </Link>
+            ) : null}
             {user.role === 'admin' ? (
               <Link
                 href="/admin/users"

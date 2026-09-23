@@ -16,7 +16,11 @@ import {
   removePrivateObject,
   storePrivateObject,
 } from '@/lib/private-storage';
-import { assertMailConfigured, enqueueInvitations } from '@/lib/signing-mail';
+import {
+  assertMailConfigured,
+  enqueueEnvelopeStatus,
+  enqueueInvitations,
+} from '@/lib/signing-mail';
 import {
   envelopeStatus,
   fromMysqlUtc,
@@ -420,6 +424,7 @@ export async function voidEnvelope(envelopeId: string, actorId: string) {
       `UPDATE envelopes SET status = 'voided', updated_at = UTC_TIMESTAMP(6) WHERE id = ?`,
       [envelopeId],
     );
+    await enqueueEnvelopeStatus(connection, envelopeId, 'void');
     await connection.execute(
       `UPDATE signer_sessions SET revoked_at = UTC_TIMESTAMP(6)
        WHERE signer_id IN (SELECT id FROM signers WHERE envelope_id = ?) AND revoked_at IS NULL`,
@@ -496,10 +501,17 @@ export async function refreshEnvelopeStatus(
      updated_at = UTC_TIMESTAMP(6) WHERE id = ?`,
     [status, status, envelopeId],
   );
-  if (!['completed', 'declined', 'expired', 'voided'].includes(status))
+  if (status === 'completed')
+    await enqueueEnvelopeStatus(connection, envelopeId, 'completion');
+  else if (status === 'declined')
+    await enqueueEnvelopeStatus(connection, envelopeId, 'decline');
+  else if (!['expired', 'voided'].includes(status))
     await enqueueInvitations(
       connection,
       nextEligibleSigners(signers).map((signer) => signer.id),
+      signers.some((signer) => signer.status === 'signed')
+        ? 'next_signer'
+        : 'invite',
     );
   return status;
 }

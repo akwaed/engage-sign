@@ -4,6 +4,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 
 import { appendAuditEventInTransaction } from '@/lib/audit';
 import { getMysqlPool } from '@/lib/mysql';
+import { enqueueEnvelopeStatus } from '@/lib/signing-mail';
 
 export async function expireDueEnvelopes(limit = 100) {
   const [due] = await getMysqlPool().query<
@@ -39,6 +40,7 @@ export async function expireDueEnvelopes(limit = 100) {
            WHERE signer_id IN (SELECT id FROM signers WHERE envelope_id = ?) AND revoked_at IS NULL`,
           [item.id],
         );
+        await enqueueEnvelopeStatus(connection, item.id, 'expiration');
         await appendAuditEventInTransaction(connection, {
           actorType: 'system',
           envelopeId: item.id,

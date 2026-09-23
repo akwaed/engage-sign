@@ -28,7 +28,7 @@ function rootPath() {
 }
 
 function filePath(key: string) {
-  if (!/^[a-z0-9/_-]+\.(docx|pdf|enc)$/i.test(key))
+  if (!/^[a-z0-9/_-]+\.(docx|pdf|enc|zip)$/i.test(key))
     throw new Error('Invalid private storage key.');
   const root = rootPath();
   const path = resolve(root, key);
@@ -49,7 +49,7 @@ export async function storeTemplateVersion(
 export async function storePrivateObject(
   kind: 'templates' | 'documents' | 'signatures',
   ownerId: string,
-  extension: 'docx' | 'pdf' | 'enc',
+  extension: 'docx' | 'pdf' | 'enc' | 'zip',
   bytes: Uint8Array,
 ) {
   if (!/^[a-f0-9-]{36}$/i.test(ownerId))

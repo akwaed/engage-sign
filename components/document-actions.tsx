@@ -30,6 +30,29 @@ export function DocumentActions({
       setBusy(false);
     }
   }
+  async function downloadArchive() {
+    setBusy(true);
+    setMessage('');
+    try {
+      const response = await fetch(`/api/envelopes/${id}/archive`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const result = (await response.json()) as { error?: string };
+        throw new Error(result.error ?? 'Archive is unavailable.');
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `engage-sign-final-${id}.zip`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Archive is unavailable.');
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <div className="mt-5">
       <div className="flex flex-wrap gap-2">
@@ -67,6 +90,15 @@ export function DocumentActions({
               Void document
             </button>
           </>
+        )}
+        {status === 'completed' && (
+          <button
+            disabled={busy}
+            onClick={() => void downloadArchive()}
+            className="rounded border px-4 py-2 text-sm"
+          >
+            Download verified final archive
+          </button>
         )}
       </div>
       {message && (

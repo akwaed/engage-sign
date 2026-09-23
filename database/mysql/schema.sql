@@ -188,10 +188,30 @@ CREATE TABLE notification_outbox (
   attempts INT UNSIGNED NOT NULL DEFAULT 0,
   created_at DATETIME(6) NOT NULL,
   claimed_at DATETIME(6) NULL,
+  next_attempt_at DATETIME(6) NULL,
+  last_attempt_at DATETIME(6) NULL,
   sent_at DATETIME(6) NULL,
+  provider_response VARCHAR(255) NULL,
+  last_error_code VARCHAR(80) NULL,
   UNIQUE KEY notification_outbox_once (signer_id, notification_type),
   KEY notification_outbox_status_idx (status, created_at),
+  KEY notification_outbox_retry_idx (status, next_attempt_at),
   CONSTRAINT notification_outbox_signer_fk FOREIGN KEY (signer_id) REFERENCES signers(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE final_archives (
+  id CHAR(36) PRIMARY KEY,
+  envelope_id CHAR(36) NOT NULL,
+  final_document_id CHAR(36) NOT NULL,
+  final_document_hash CHAR(64) NOT NULL,
+  certificate_hash CHAR(64) NOT NULL,
+  archive_hash CHAR(64) NOT NULL,
+  storage_key VARCHAR(1024) NOT NULL,
+  byte_length BIGINT UNSIGNED NOT NULL,
+  created_at DATETIME(6) NOT NULL,
+  UNIQUE KEY final_archives_envelope_unique (envelope_id),
+  CONSTRAINT final_archives_envelope_fk FOREIGN KEY (envelope_id) REFERENCES envelopes(id) ON DELETE CASCADE,
+  CONSTRAINT final_archives_document_fk FOREIGN KEY (final_document_id) REFERENCES document_versions(id)
 ) ENGINE=InnoDB;
 
 CREATE TABLE signature_events (

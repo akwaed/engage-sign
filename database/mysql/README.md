@@ -4,7 +4,7 @@
 
 The Sites preview uses its generated D1 adapter so it can run in the hosted preview environment. The production application should use the same service boundaries with this MySQL schema and a private filesystem or object-storage adapter. Do not place source or signed files under the public web root.
 
-Existing MySQL installations must apply `migrations/001_template_lifecycle.sql` and then `migrations/002_signing_workflow.sql` before deploying these workflows. Back up the database first and record both migrations in the deployment log. Application rollback should leave the new columns and tables in place so document history is preserved.
+Existing MySQL installations must apply migrations 001, 002, and then `migrations/003_final_archive_and_mail.sql` before deploying these workflows. Back up the database first and record each migration in the deployment log. Application rollback should leave the new columns and tables in place so document history is preserved. GoDaddy's Import SQL replaces existing tables; never upload a migration file by itself there. Use a verified, full granular export with all rows and append migration 003 to that complete dump.
 
 Before accepting real signatures:
 

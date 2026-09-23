@@ -7,6 +7,7 @@ import { appendAuditEventInTransaction, toMysqlDate } from '@/lib/audit';
 import { convertDocxToPdf } from '@/lib/docx-convert';
 import { decryptValue, encryptValue, valueHash } from '@/lib/encryption';
 import { refreshEnvelopeStatus, toTemplateField } from '@/lib/envelopes';
+import { finalizeCompletedEnvelope } from '@/lib/finalization';
 import { getMysqlPool } from '@/lib/mysql';
 import {
   readPrivateObject,
@@ -539,7 +540,15 @@ export async function submitSignature(
       ),
     });
     await connection.commit();
-    return { status, documentHash: sha256(pdf) };
+    let archivePending = false;
+    if (status === 'completed') {
+      try {
+        await finalizeCompletedEnvelope(session.envelope_id);
+      } catch {
+        archivePending = true;
+      }
+    }
+    return { status, documentHash: sha256(pdf), archivePending };
   } catch (error) {
     await connection.rollback().catch(() => undefined);
     if (signatureKey)

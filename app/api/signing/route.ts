@@ -34,8 +34,7 @@ export async function POST(request: Request) {
     }
     if (body.action === 'decline') {
       const status = await declineDocument(session, request);
-      if (status !== 'declined')
-        await dispatchInvitations().catch(() => undefined);
+      await dispatchInvitations().catch(() => undefined);
       return Response.json({ ok: true, status });
     }
     if (body.action === 'submit') {
@@ -44,7 +43,7 @@ export async function POST(request: Request) {
         validateSigningInput(body.submission),
         request,
       );
-      if (result.status !== 'already_signed' && result.status !== 'completed')
+      if (result.status !== 'already_signed')
         await dispatchInvitations().catch(() => undefined);
       return Response.json({ ok: true, ...result });
     }

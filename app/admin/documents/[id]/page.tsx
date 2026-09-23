@@ -56,7 +56,7 @@ export default async function DocumentStatusPage({
               s.routing_order, s.is_required, s.notified_at, s.viewed_at, s.signed_at,
               o.status AS notification_status
        FROM signers s LEFT JOIN notification_outbox o
-         ON o.signer_id = s.id AND o.notification_type = 'invite'
+         ON o.signer_id = s.id AND o.notification_type IN ('invite', 'next_signer')
        WHERE s.envelope_id = ? ORDER BY s.routing_order, s.id`,
       [id],
     ),

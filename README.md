@@ -105,20 +105,22 @@ The nine source files are kept outside this repository in the sibling `engage do
 - [x] Save the hash of every prepared, presented, intermediate, and final document version.
 - [x] Bake signatures and signer-entered fields into the final PDF, with a signature-evidence page for each signer.
 - [x] Add a readable evidence page showing each signing event and its presented document hash.
-- [ ] Generate the final archive only after all required signers have completed.
-- [ ] Store the final PDF checksum separately; do not try to embed a file's own checksum inside itself.
-- [ ] Add independent checksum verification and regression tests for every PDF-generation path.
+- [x] Generate the final archive only after all required signers have completed.
+- [x] Store the final PDF checksum separately; do not try to embed a file's own checksum inside itself.
+- [x] Add independent checksum verification and regression tests for the PDF generation and archive paths.
 
 ### 8. Outlook SMTP and email delivery
 
 - [x] Add an SMTP mail adapter for the approved Outlook/Microsoft 365 account.
 - [x] Store SMTP host, port, username, credential, sender address, and reply-to address in GoDaddy Preview secrets - never in Git. SMTP delivery still needs a live test, and Published secrets are separate.
 - [x] Require encrypted transport and reject invalid certificates.
-- [ ] Create branded templates for initial signing requests, next-signer notifications, reminders, completion notices, expiration, decline, and void events.
-- [ ] Keep signing tokens out of email logs and application error messages.
-- [ ] Record message type, recipient reference, send time, provider response, retry count, and final delivery status in the audit trail.
-- [ ] Add retry/backoff behavior and an administrator view for failed messages.
+- [x] Create branded templates for initial signing requests, next-signer notifications, reminders, completion notices, expiration, decline, and void events.
+- [x] Keep signing tokens out of email logs and application error messages.
+- [x] Record message type, recipient reference, send time, sanitized provider response, retry count, and delivery status in the audit trail.
+- [x] Add retry/backoff behavior and an administrator view for failed messages.
 - [ ] Verify the sender domain's SPF, DKIM, and DMARC configuration before production use.
+
+The completed-document archive contains every prepared, presented, intermediate, and final PDF, a signer-event certificate, and a checksum manifest. MySQL stores the final PDF and ZIP hashes separately. Mail delivery can be checked and run from `/admin/mail`; the SMTP connection test does not send a message. Production delivery still needs a real test after migration 003 is applied. Public DNS for `engagess.co` has an SPF chain that includes Microsoft 365, but the Microsoft DKIM selector records and `_dmarc` TXT record were absent on 2026-09-23. Domain authentication remains a production release gate.
 
 ### 9. Scheduled jobs
 

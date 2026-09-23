@@ -13,7 +13,7 @@ import {
 } from '@/lib/request-security';
 import {
   dispatchInvitations,
-  resetFailedInvitations,
+  resetFailedNotifications,
 } from '@/lib/signing-mail';
 
 export const runtime = 'nodejs';
@@ -53,9 +53,10 @@ export async function PATCH(
       };
     } else if (body.action === 'void') {
       await voidEnvelope(id, actor.id);
+      await dispatchInvitations().catch(() => undefined);
       status = 'voided';
     } else if (body.action === 'retry_notifications') {
-      await resetFailedInvitations(id);
+      await resetFailedNotifications(id);
       const notifications = await dispatchInvitations();
       details = {
         notificationsSent: notifications.filter((item) => item.sent).length,
