@@ -36,7 +36,7 @@ export async function POST(request: Request) {
         console.warn(`SMTP_VERIFY_FAILED code=${code} status=${Number.isInteger(status) ? status : 'none'}`);
         return Response.json({
           error: `SMTP verification failed (${code}${Number.isInteger(status) ? `, status ${status}` : ''}).`,
-        }, { status: 502 });
+        }, { status: 424 });
       }
     }
     if (body.action === 'retry') {
