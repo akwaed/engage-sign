@@ -116,3 +116,7 @@ Word preview and test-fill use LibreOffice. Set `LIBREOFFICE_BIN` to the host's 
 ## Signing workflow deployment
 
 Apply `database/mysql/migrations/002_signing_workflow.sql` only after the template migration and a verified database backup. Configure `ENCRYPTION_KEY_V1` and SMTP secrets in Preview before sending a test invitation. Preview and Published currently share the hosted database; use test identities and a separated database before handling real participant data. See [`SIGNING_WORKFLOW.md`](SIGNING_WORKFLOW.md) for the full flow and remaining release checks.
+
+### Current Preview release blockers (2026-09-23)
+
+The GoDaddy project is connected to GitHub `main`; the template and signing workflows are on feature branches. The app has not been published live. The hosted database has an administrator row, but an **Everything** export from GoDaddy's Hosted Database panel downloaded only table definitions and no row inserts. That file is not a recoverable backup. Obtain and verify a complete backup through GoDaddy support or another approved database export path before importing either migration. Preview currently has no `ENCRYPTION_KEY_V1` or SMTP secrets, and the nine baseline templates have not been imported and activated. Keep the application on the existing build until these prerequisites are satisfied.
