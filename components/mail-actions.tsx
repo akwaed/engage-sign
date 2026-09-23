@@ -14,6 +14,8 @@ export function MailActions({ failedEnvelopeIds }: { failedEnvelopeIds: string[]
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, envelopeId }),
       });
+      if (!response.headers.get('content-type')?.includes('application/json'))
+        throw new Error(`Mail service returned HTTP ${response.status} without a JSON response.`);
       const result = (await response.json()) as { error?: string; message?: string };
       if (!response.ok) throw new Error(result.error ?? 'Mail operation failed.');
       if (action === 'verify') setMessage(result.message ?? 'SMTP is ready.');
