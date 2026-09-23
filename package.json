@@ -13,6 +13,7 @@
     "sites:build": "vinext build",
     "sites:start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",
+    "test": "node --experimental-strip-types --test tests/*.test.mts",
     "format": "oxfmt",
     "db:generate": "drizzle-kit generate"
   },
@@ -30,6 +31,8 @@
     "lucide-react": "1.31.0",
     "mysql2": "^3.24.4",
     "next": "^16.3.5",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.3.289",
     "react": "19.2.6",
     "react-day-picker": "9.8.1",
     "react-dom": "19.2.6",

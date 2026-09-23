@@ -12,6 +12,7 @@ Engage Sign is the first implementation milestone for Engage Support Services' i
 - A MySQL 8 production schema under `database/mysql/` and generated D1 migrations for the Sites preview.
 - A standard Node/Next.js production runtime for GoDaddy that listens on GoDaddy's assigned port, plus a one-time administrator setup, staff login, database-backed 12-hour sessions, login throttling, same-origin request protection, server-side `admin`/`staff` checks, account disablement, administrator-managed password resets, and authentication audit events.
 - An administrator user-management screen. Complete legal exports are enforced as administrator-only on the server.
+- An administrator template workspace for exact-baseline import, private storage, SHA-256 verification, signer field mapping, scanned-PDF coordinates, test fills, and version activation/retirement/rollback. Imported source files and rendered previews remain administrator-only.
 
 For the exact GoDaddy setup sequence, see [`docs/GODADDY_DEPLOYMENT.md`](docs/GODADDY_DEPLOYMENT.md).
 
@@ -64,14 +65,18 @@ Do not use the system for real signatures or sensitive participant data until th
 
 ### 4. Template import and field mapping
 
-- [ ] Add an administrator workflow to upload DOCX and PDF templates to private storage.
-- [ ] Verify and record a SHA-256 hash whenever a template version is uploaded.
-- [ ] Add merge placeholders to the six Word templates and convert populated versions to PDF.
-- [ ] Build a coordinate mapper for the three scanned PDFs.
-- [ ] Support `admin-fill`, `participant-fill`, `signer`, and `system` fields.
-- [ ] Assign every signature, initials, date, checkbox, and text field to a signer role.
-- [ ] Add template preview, test-fill, version activation, version retirement, and rollback.
+- [x] Add an administrator workflow to upload DOCX and PDF templates to private storage.
+- [x] Verify and record a SHA-256 hash whenever a template version is uploaded.
+- [x] Generate draft merge-placeholder revisions for the six Word templates, preserving the exact baseline files.
+- [ ] Convert populated Word revisions to PDF on the deployment host and visually approve the results.
+- [x] Build a coordinate mapper for scanned PDFs.
+- [x] Support `admin-fill`, `participant-fill`, `signer`, and `system` fields.
+- [x] Assign every generated Word placeholder and scanned-PDF overlay field to a signer role in draft field maps.
+- [x] Add administrator-only source/PDF preview, PDF test-fill, version activation, version retirement, and rollback controls.
+- [ ] Configure and verify DOCX-to-PDF conversion on the deployment host for Word preview and test-fill.
 - [ ] Import and validate all nine baseline source files against the hashes in `lib/template-catalog.ts`.
+
+The nine source files are kept outside this repository in the sibling `engage docs` folder. All nine local SHA-256 hashes match the catalog. The repository script generates six private draft DOCX revisions and role-assigned JSON maps under ignored `work/revised/`; the three scanned PDFs have role-assigned draft coordinate maps. These files have **not** been imported into GoDaddy private storage, and no version has been activated. The first upload for each catalog entry must match its recorded baseline hash. A headless LibreOffice binary is still required on the application host to render Word previews and test PDFs. See [`docs/TEMPLATE_WORKFLOW.md`](docs/TEMPLATE_WORKFLOW.md).
 
 ### 5. Document sending and signer routing
 

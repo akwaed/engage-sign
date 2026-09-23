@@ -76,7 +76,7 @@ const documents = [
 const navigation = [
   { label: 'Overview', icon: LayoutDashboardIcon, href: '/', active: true },
   { label: 'Documents', icon: FileSignatureIcon, href: '/#documents' },
-  { label: 'Templates', icon: FilesIcon, href: '/#templates', count: '9' },
+  { label: 'Templates', icon: FilesIcon, href: '/admin/templates', count: '9' },
   { label: 'Archive', icon: ArchiveIcon, href: '/#archive' },
 ];
 
@@ -110,7 +110,11 @@ export default async function Home() {
             {navigation.map((item) => (
               <Link
                 key={item.label}
-                href={item.href}
+                href={
+                  item.label === 'Templates' && user.role !== 'admin'
+                    ? '/#templates'
+                    : item.href
+                }
                 className={`flex h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors ${
                   item.active
                     ? 'bg-white/11 font-medium text-white'
