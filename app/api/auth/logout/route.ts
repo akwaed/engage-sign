@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       ipHash: hashClientIp(getClientIp(request)),
       userAgent: request.headers.get('user-agent'),
     });
-  const response = redirectToLocalPath('/login');
+  const response = redirectToLocalPath(request, '/login');
   response.cookies.set(expiredSessionCookie());
   return response;
 }
