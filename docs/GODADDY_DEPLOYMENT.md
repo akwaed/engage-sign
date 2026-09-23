@@ -69,7 +69,7 @@ In **Settings → Secrets → Preview**, add:
 | `IP_HASH_SECRET` | Second generated value; used to protect IP-derived audit identifiers    |
 | `APP_URL`        | Preview URL for preview; later `https://sign.engagess.co` for Published |
 
-Do not add SMTP secrets yet; email delivery has not been implemented. Add `PRIVATE_STORAGE_PATH` only after GoDaddy confirms the persistent private directory outside the public web root.
+For signing invitations, also configure `ENCRYPTION_KEY_V1`, `PRIVATE_STORAGE_PATH`, the SMTP secrets in `.env.example`, and an HTTPS `APP_URL`. Do not send real invitations until the template, storage, mail, and consent checks in [`SIGNING_WORKFLOW.md`](SIGNING_WORKFLOW.md) are complete.
 
 Save the same required application secrets in **Publish**, using **Sync from Preview** only if GoDaddy clearly shows which direction the copy will occur. Use separate Preview and Published secrets when GoDaddy supports separate databases and storage.
 
@@ -105,10 +105,14 @@ Only continue after Preview is healthy and the checks above pass.
 
 ## 7. Production limits that remain
 
-The staff authentication and role foundation is implemented, but this is not yet approved for real signatures or sensitive participant data. SMTP, recipient signing links, PDF generation, encryption of sensitive record values, scheduled jobs, durable private file storage, backup/restore drills, and the security review remain release blockers in the main README.
+The staff and recipient signing paths are implemented in code, but this is not yet approved for real signatures or sensitive participant data. Hosted SMTP and encryption secrets, recipient end-to-end testing, scheduled reminders, backup/restore drills, legal-language approval, and the security review remain release blockers in the main README.
 
 ## Template workspace deployment
 
 Before deploying the template workspace, back up MySQL and apply `database/mysql/migrations/001_template_lifecycle.sql` through Hosted Database import. GoDaddy's File Manager identifies `/private` as a private directory durable across deployments, so Preview uses `PRIVATE_STORAGE_PATH=/private/engage-sign`. The workspace refuses uploads until that directory is configured.
 
 Word preview and test-fill use LibreOffice. Set `LIBREOFFICE_BIN` to the host's `soffice` executable only after verifying that GoDaddy permits it. PDF uploads, coordinate mapping, and PDF test-fill do not depend on LibreOffice. The nine original source files must be supplied and hash-checked before marking the catalog imported. See [`TEMPLATE_WORKFLOW.md`](TEMPLATE_WORKFLOW.md).
+
+## Signing workflow deployment
+
+Apply `database/mysql/migrations/002_signing_workflow.sql` only after the template migration and a verified database backup. Configure `ENCRYPTION_KEY_V1` and SMTP secrets in Preview before sending a test invitation. Preview and Published currently share the hosted database; use test identities and a separated database before handling real participant data. See [`SIGNING_WORKFLOW.md`](SIGNING_WORKFLOW.md) for the full flow and remaining release checks.

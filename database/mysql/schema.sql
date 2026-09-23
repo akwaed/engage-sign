@@ -99,7 +99,10 @@ CREATE TABLE envelopes (
   id CHAR(36) PRIMARY KEY,
   template_version_id CHAR(36) NOT NULL,
   title VARCHAR(255) NOT NULL,
-  status ENUM('draft', 'sent', 'partially_signed', 'completed', 'declined', 'expired', 'voided') NOT NULL,
+  status ENUM('draft', 'sent', 'viewed', 'partially_signed', 'completed', 'declined', 'expired', 'voided') NOT NULL,
+  routing_mode ENUM('ordered', 'parallel') NOT NULL DEFAULT 'ordered',
+  reminder_schedule_json JSON NOT NULL,
+  locked_at DATETIME(6) NULL,
   created_by CHAR(36) NOT NULL,
   expires_at DATETIME(6) NULL,
   completed_at DATETIME(6) NULL,
@@ -120,9 +123,12 @@ CREATE TABLE signers (
   email_encrypted LONGTEXT NOT NULL,
   encryption_key_version INT UNSIGNED NOT NULL DEFAULT 1,
   routing_order INT UNSIGNED NOT NULL DEFAULT 1,
+  is_required BOOLEAN NOT NULL DEFAULT TRUE,
   status ENUM('pending', 'sent', 'viewed', 'signed', 'declined', 'expired') NOT NULL,
   token_hash CHAR(64) NOT NULL,
   token_expires_at DATETIME(6) NOT NULL,
+  token_used_at DATETIME(6) NULL,
+  notified_at DATETIME(6) NULL,
   viewed_at DATETIME(6) NULL,
   signed_at DATETIME(6) NULL,
   UNIQUE KEY signers_token_hash_unique (token_hash),
@@ -140,6 +146,7 @@ CREATE TABLE field_values (
   value_hash CHAR(64) NOT NULL,
   created_at DATETIME(6) NOT NULL,
   KEY field_values_envelope_idx (envelope_id),
+  UNIQUE KEY field_values_envelope_field_unique (envelope_id, template_field_id),
   CONSTRAINT field_values_envelope_fk FOREIGN KEY (envelope_id) REFERENCES envelopes(id) ON DELETE CASCADE,
   CONSTRAINT field_values_field_fk FOREIGN KEY (template_field_id) REFERENCES template_fields(id),
   CONSTRAINT field_values_signer_fk FOREIGN KEY (signer_id) REFERENCES signers(id) ON DELETE SET NULL
@@ -159,6 +166,34 @@ CREATE TABLE document_versions (
   CONSTRAINT document_versions_envelope_fk FOREIGN KEY (envelope_id) REFERENCES envelopes(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+CREATE TABLE signer_sessions (
+  id CHAR(36) PRIMARY KEY,
+  signer_id CHAR(36) NOT NULL,
+  token_hash CHAR(64) NOT NULL,
+  presented_document_id CHAR(36) NULL,
+  created_at DATETIME(6) NOT NULL,
+  expires_at DATETIME(6) NOT NULL,
+  revoked_at DATETIME(6) NULL,
+  UNIQUE KEY signer_sessions_token_unique (token_hash),
+  KEY signer_sessions_signer_idx (signer_id),
+  CONSTRAINT signer_sessions_signer_fk FOREIGN KEY (signer_id) REFERENCES signers(id) ON DELETE CASCADE,
+  CONSTRAINT signer_sessions_document_fk FOREIGN KEY (presented_document_id) REFERENCES document_versions(id)
+) ENGINE=InnoDB;
+
+CREATE TABLE notification_outbox (
+  id CHAR(36) PRIMARY KEY,
+  signer_id CHAR(36) NOT NULL,
+  notification_type VARCHAR(40) NOT NULL,
+  status ENUM('pending', 'sending', 'sent', 'failed') NOT NULL DEFAULT 'pending',
+  attempts INT UNSIGNED NOT NULL DEFAULT 0,
+  created_at DATETIME(6) NOT NULL,
+  claimed_at DATETIME(6) NULL,
+  sent_at DATETIME(6) NULL,
+  UNIQUE KEY notification_outbox_once (signer_id, notification_type),
+  KEY notification_outbox_status_idx (status, created_at),
+  CONSTRAINT notification_outbox_signer_fk FOREIGN KEY (signer_id) REFERENCES signers(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 CREATE TABLE signature_events (
   id CHAR(36) PRIMARY KEY,
   envelope_id CHAR(36) NOT NULL,
@@ -170,8 +205,10 @@ CREATE TABLE signature_events (
   encryption_key_version INT UNSIGNED NOT NULL DEFAULT 1,
   user_agent TEXT NOT NULL,
   consent_text_version VARCHAR(100) NOT NULL,
+  submission_hash CHAR(64) NOT NULL,
   signed_at DATETIME(6) NOT NULL,
   KEY signature_events_envelope_idx (envelope_id),
+  UNIQUE KEY signature_events_signer_unique (signer_id),
   CONSTRAINT signature_events_envelope_fk FOREIGN KEY (envelope_id) REFERENCES envelopes(id) ON DELETE CASCADE,
   CONSTRAINT signature_events_signer_fk FOREIGN KEY (signer_id) REFERENCES signers(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;

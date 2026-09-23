@@ -121,6 +121,98 @@ export async function fillPdf(
   return document.save();
 }
 
+export async function drawSignatureImages(
+  bytes: Uint8Array,
+  fields: TemplateField[],
+  png: Uint8Array,
+) {
+  const document = await PDFDocument.load(bytes);
+  const image = await document.embedPng(png);
+  for (const field of fields.filter((item) => item.fieldType === 'signature')) {
+    if (
+      !field.pageNumber ||
+      field.x === null ||
+      field.y === null ||
+      field.width === null ||
+      field.height === null
+    )
+      continue;
+    const page = document.getPage(field.pageNumber - 1);
+    const { width, height } = page.getSize();
+    const boxWidth = (field.width / 1000) * width;
+    const boxHeight = (field.height / 1000) * height;
+    const scale = Math.min(boxWidth / image.width, boxHeight / image.height);
+    page.drawImage(image, {
+      x: (field.x / 1000) * width,
+      y: height - ((field.y + field.height) / 1000) * height,
+      width: image.width * scale,
+      height: image.height * scale,
+    });
+  }
+  return document.save();
+}
+
+export async function appendSignatureEvidence(
+  bytes: Uint8Array,
+  evidence: {
+    name: string;
+    role: string;
+    signedAt: string;
+    presentedHash: string;
+    method: 'typed' | 'drawn';
+    png?: Uint8Array;
+  },
+) {
+  const document = await PDFDocument.load(bytes);
+  const page = document.addPage([612, 792]);
+  const font = await document.embedFont(StandardFonts.Helvetica);
+  const lines = [
+    'Electronic signature evidence',
+    `Signer: ${pdfSafeText(font, evidence.name)}`,
+    `Role: ${pdfSafeText(font, evidence.role)}`,
+    `Signer name SHA-256: ${sha256(new TextEncoder().encode(evidence.name))}`,
+    `Signed at (UTC): ${evidence.signedAt}`,
+    `Method: ${evidence.method}`,
+    'Presented document SHA-256:',
+    evidence.presentedHash,
+  ];
+  lines.forEach((line, index) =>
+    page.drawText(line, {
+      x: 54,
+      y: 735 - index * 28,
+      size: index === 0 ? 18 : 11,
+      font,
+    }),
+  );
+  if (evidence.png) {
+    const image = await document.embedPng(evidence.png);
+    const scale = Math.min(400 / image.width, 160 / image.height);
+    page.drawImage(image, {
+      x: 54,
+      y: 340,
+      width: image.width * scale,
+      height: image.height * scale,
+    });
+  }
+  return document.save();
+}
+
+function pdfSafeText(
+  font: Awaited<ReturnType<PDFDocument['embedFont']>>,
+  value: string,
+) {
+  let safe = '';
+  for (const character of value) {
+    try {
+      font.encodeText(character);
+      safe += character;
+    } catch {
+      safe += '?';
+    }
+  }
+  return safe;
+}
+
 function escapeXml(value: string) {
   return value
     .replace(/&/g, '&amp;')

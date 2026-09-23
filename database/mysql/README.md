@@ -4,7 +4,7 @@
 
 The Sites preview uses its generated D1 adapter so it can run in the hosted preview environment. The production application should use the same service boundaries with this MySQL schema and a private filesystem or object-storage adapter. Do not place source or signed files under the public web root.
 
-Existing MySQL installations must apply `migrations/001_template_lifecycle.sql` before deploying the template workspace. Back up the database first and record the migration in the deployment log. The migration is additive; rollback of the application should leave the new nullable/defaulted columns in place so template lifecycle history is preserved.
+Existing MySQL installations must apply `migrations/001_template_lifecycle.sql` and then `migrations/002_signing_workflow.sql` before deploying these workflows. Back up the database first and record both migrations in the deployment log. Application rollback should leave the new columns and tables in place so document history is preserved.
 
 Before accepting real signatures:
 

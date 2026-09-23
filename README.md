@@ -80,40 +80,40 @@ The nine source files are kept outside this repository in the sibling `engage do
 
 ### 5. Document sending and signer routing
 
-- [ ] Build the send-document form with template selection, admin fields, recipients, routing order, expiration, and reminder overrides.
-- [ ] Generate a separate cryptographically random token for each document/signer pair.
-- [ ] Store only token hashes, enforce expiration, and invalidate each token after successful signing.
-- [ ] Exchange URL tokens for short-lived secure cookies so tokens do not remain in browser history or analytics.
-- [ ] Support ordered and parallel signers, including optional signer roles.
-- [ ] Track draft, sent, viewed, partially signed, completed, declined, expired, and voided statuses.
-- [ ] Prevent edits to the document version or assigned fields after the first signer receives it.
+- [x] Build the send-document form with template selection, admin fields, recipients, routing order, expiration, and reminder overrides.
+- [x] Generate a separate cryptographically random token for each document/signer pair.
+- [x] Store only token hashes, enforce expiration, and invalidate each token after successful signing.
+- [x] Exchange URL tokens for short-lived secure cookies and redirect to a clean signing URL.
+- [x] Support ordered and parallel signers, including optional signer roles.
+- [x] Track draft, sent, viewed, partially signed, completed, declined, expired, and voided statuses.
+- [x] Prevent edits to the document version or assigned fields once invitations are queued.
 
 ### 6. Recipient signing experience
 
-- [ ] Build the public signing page with no staff account requirement.
-- [ ] Show the exact document being signed and require explicit electronic-signature consent.
-- [ ] Support typed and drawn signatures plus initials and assigned participant fields.
-- [ ] Validate required fields and provide an accessible review-before-submit step.
-- [ ] Capture the UTC timestamp, IP address, user agent, consent version, signature method, signer identity, and hash of the exact presented PDF.
-- [ ] Encrypt IP addresses and other sensitive evidence fields at rest.
-- [ ] Make signing submission idempotent and reject expired, voided, reused, or mismatched tokens.
-- [ ] Notify the next signer only after the prior required signer completes when routing is ordered.
+- [x] Build the public signing page with no staff account requirement.
+- [x] Show the immutable presented PDF and require explicit electronic-signature consent.
+- [x] Support typed and drawn signatures plus initials and assigned participant fields.
+- [x] Validate required fields and provide a review-before-submit step with a typed-signature keyboard option.
+- [x] Capture the UTC timestamp, IP address, user agent, consent version, signature method, signer identity, and hash of the exact presented PDF.
+- [x] Encrypt IP addresses, user agents, signer identities, field values, and signature payloads at rest.
+- [x] Make signing submission idempotent and reject expired, voided, reused, or mismatched tokens.
+- [x] Queue the next signer only after prior required signers complete in ordered routing; SMTP delivery requires host configuration.
 
 ### 7. PDF and evidence generation
 
-- [ ] Render admin fields into an immutable prepared PDF before sending.
-- [ ] Save the hash of every prepared, presented, intermediate, and final document version.
-- [ ] Bake signatures and signer-entered fields into the final PDF.
-- [ ] Add a readable audit block or separate certificate showing all signer events and document hashes.
+- [x] Render admin fields into an immutable prepared PDF before sending.
+- [x] Save the hash of every prepared, presented, intermediate, and final document version.
+- [x] Bake signatures and signer-entered fields into the final PDF, with a signature-evidence page for each signer.
+- [x] Add a readable evidence page showing each signing event and its presented document hash.
 - [ ] Generate the final archive only after all required signers have completed.
 - [ ] Store the final PDF checksum separately; do not try to embed a file's own checksum inside itself.
 - [ ] Add independent checksum verification and regression tests for every PDF-generation path.
 
 ### 8. Outlook SMTP and email delivery
 
-- [ ] Add a production mail adapter, initially using the approved Outlook/Microsoft 365 SMTP account.
+- [x] Add an SMTP mail adapter for the approved Outlook/Microsoft 365 account; host credentials are still required.
 - [ ] Store SMTP host, port, username, credential or OAuth configuration, sender address, and reply-to address in environment secrets - never in Git.
-- [ ] Require encrypted transport and reject invalid certificates.
+- [x] Require encrypted transport and reject invalid certificates.
 - [ ] Create branded templates for initial signing requests, next-signer notifications, reminders, completion notices, expiration, decline, and void events.
 - [ ] Keep signing tokens out of email logs and application error messages.
 - [ ] Record message type, recipient reference, send time, provider response, retry count, and final delivery status in the audit trail.

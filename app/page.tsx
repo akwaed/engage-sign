@@ -13,6 +13,7 @@ import {
   UsersIcon,
 } from 'lucide-react';
 import Link from 'next/link';
+import type { RowDataPacket } from 'mysql2/promise';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -35,43 +36,19 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { requireStaffUser } from '@/lib/auth/session';
+import { getMysqlPool } from '@/lib/mysql';
+import { expireDueEnvelopes } from '@/lib/envelope-expiration';
 
 export const dynamic = 'force-dynamic';
 
-const documents = [
-  {
-    name: 'Medication Administration Refresher',
-    recipient: 'Demo employee',
-    status: 'Awaiting trainer',
-    statusClass: 'bg-amber-50 text-amber-800 ring-amber-200',
-    progress: '1 of 2 signed',
-    due: 'Sep 23',
-  },
-  {
-    name: 'FHP Contractor Agreement',
-    recipient: 'Demo contractor',
-    status: 'Completed',
-    statusClass: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
-    progress: '2 of 2 signed',
-    due: 'Sep 17',
-  },
-  {
-    name: 'Background Authorization Form',
-    recipient: 'Demo applicant',
-    status: 'Viewed',
-    statusClass: 'bg-sky-50 text-sky-800 ring-sky-200',
-    progress: '0 of 1 signed',
-    due: 'Sep 25',
-  },
-  {
-    name: 'Medication Administration Policies',
-    recipient: 'Demo staff member',
-    status: 'Sent',
-    statusClass: 'bg-stone-100 text-stone-700 ring-stone-200',
-    progress: '0 of 2 signed',
-    due: 'Sep 27',
-  },
-];
+type DocumentRow = RowDataPacket & {
+  id: string;
+  title: string;
+  status: string;
+  expires_at: string;
+  signer_count: number;
+  signed_count: number;
+};
 
 const navigation = [
   { label: 'Overview', icon: LayoutDashboardIcon, href: '/', active: true },
@@ -82,6 +59,35 @@ const navigation = [
 
 export default async function Home() {
   const user = await requireStaffUser('/');
+  await expireDueEnvelopes();
+  const [[documents], [counts], [activeTemplates]] = await Promise.all([
+    getMysqlPool().query<DocumentRow[]>(
+      `SELECT e.id, e.title, e.status, e.expires_at,
+              COUNT(s.id) AS signer_count,
+              SUM(CASE WHEN s.status = 'signed' THEN 1 ELSE 0 END) AS signed_count
+       FROM envelopes e LEFT JOIN signers s ON s.envelope_id = e.id
+       GROUP BY e.id ORDER BY e.created_at DESC LIMIT 20`,
+    ),
+    getMysqlPool().query<
+      Array<
+        RowDataPacket & {
+          awaiting: number;
+          completed: number;
+          expiring: number;
+        }
+      >
+    >(
+      `SELECT
+       SUM(CASE WHEN status IN ('sent','viewed','partially_signed') THEN 1 ELSE 0 END) AS awaiting,
+       SUM(CASE WHEN status = 'completed' AND completed_at >= DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-01') THEN 1 ELSE 0 END) AS completed,
+       SUM(CASE WHEN status IN ('sent','viewed','partially_signed')
+         AND expires_at <= DATE_ADD(UTC_TIMESTAMP(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS expiring
+       FROM envelopes`,
+    ),
+    getMysqlPool().query<Array<RowDataPacket & { total: number }>>(
+      "SELECT COUNT(*) AS total FROM template_versions WHERE lifecycle = 'active'",
+    ),
+  ]);
   const initials = user.displayName
     .split(/[\s@._-]+/)
     .filter(Boolean)
@@ -197,7 +203,10 @@ export default async function Home() {
             <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#a04d31]">
-                  Friday, September 18
+                  {new Intl.DateTimeFormat('en-US', {
+                    dateStyle: 'full',
+                    timeZone: 'America/New_York',
+                  }).format(new Date())}
                 </p>
                 <h1 className="mt-2 text-3xl font-semibold tracking-[-0.035em] text-[#2c2028]">
                   Document signing
@@ -209,36 +218,41 @@ export default async function Home() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {user.role === 'admin' ? <LegalExportButton /> : null}
-                <Button size="lg" className="bg-[#ed6435] hover:bg-[#d9552a]">
-                  <PlusIcon data-icon="inline-start" />
-                  Send document
-                </Button>
+                {user.role === 'admin' ? (
+                  <Link
+                    href="/admin/send"
+                    className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#ed6435] px-3 text-sm font-medium text-white hover:bg-[#d9552a]"
+                  >
+                    <PlusIcon data-icon="inline-start" />
+                    Send document
+                  </Link>
+                ) : null}
               </div>
             </div>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <MetricCard
                 label="Awaiting signatures"
-                value="6"
-                note="3 need your signature"
+                value={String(counts[0]?.awaiting ?? 0)}
+                note="Open documents"
                 icon={Clock3Icon}
               />
               <MetricCard
                 label="Completed this month"
-                value="18"
-                note="All audit records sealed"
+                value={String(counts[0]?.completed ?? 0)}
+                note="Completed this month"
                 icon={CheckCircle2Icon}
               />
               <MetricCard
                 label="Expiring soon"
-                value="2"
+                value={String(counts[0]?.expiring ?? 0)}
                 note="Within the next 7 days"
                 icon={ArrowUpRightIcon}
               />
               <MetricCard
                 label="Baseline templates"
-                value="9"
-                note="6 Word · 3 scanned PDF"
+                value={String(activeTemplates[0]?.total ?? 0)}
+                note="Active versions"
                 icon={FilesIcon}
               />
             </div>
@@ -252,12 +266,6 @@ export default async function Home() {
                 <CardDescription>
                   Track partial completion across every assigned signer.
                 </CardDescription>
-                <CardAction>
-                  <Button variant="ghost" size="sm">
-                    View all
-                    <ArrowUpRightIcon data-icon="inline-end" />
-                  </Button>
-                </CardAction>
               </CardHeader>
               <CardContent className="px-0">
                 <Table>
@@ -274,26 +282,40 @@ export default async function Home() {
                   </TableHeader>
                   <TableBody>
                     {documents.map((document) => (
-                      <TableRow key={document.name} className="h-[68px]">
+                      <TableRow key={document.id} className="h-[68px]">
                         <TableCell className="pl-5 font-medium text-[#2c2028] sm:pl-6">
-                          {document.name}
+                          {user.role === 'admin' ? (
+                            <Link
+                              href={`/admin/documents/${document.id}`}
+                              className="underline"
+                            >
+                              {document.title}
+                            </Link>
+                          ) : (
+                            document.title
+                          )}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {document.recipient}
+                          {document.signer_count} signer(s)
                         </TableCell>
                         <TableCell>
                           <Badge
                             variant="outline"
-                            className={document.statusClass}
+                            className={
+                              document.status === 'completed'
+                                ? 'bg-emerald-50 text-emerald-800 ring-emerald-200'
+                                : 'bg-stone-100 text-stone-700 ring-stone-200'
+                            }
                           >
-                            {document.status}
+                            {document.status.replaceAll('_', ' ')}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {document.progress}
+                          {document.signed_count} of {document.signer_count}{' '}
+                          signed
                         </TableCell>
                         <TableCell className="pr-5 text-right text-muted-foreground sm:pr-6">
-                          {document.due}
+                          {document.expires_at.slice(0, 10)}
                         </TableCell>
                       </TableRow>
                     ))}
