@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { randomUUID } from 'node:crypto';
+import { createConnection } from 'node:net';
 import nodemailer from 'nodemailer';
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 
@@ -185,6 +186,25 @@ export async function verifyMailConnection() {
   } finally {
     transporter.close();
   }
+}
+
+export async function probeSmtpTcp() {
+  assertMailConfigured();
+  const host = process.env.SMTP_HOST!;
+  const port = Number(process.env.SMTP_PORT ?? 587);
+  return new Promise<'connected' | 'timeout' | 'failed'>((resolve) => {
+    const socket = createConnection({ host, port });
+    let finished = false;
+    const finish = (result: 'connected' | 'timeout' | 'failed') => {
+      if (finished) return;
+      finished = true;
+      socket.destroy();
+      resolve(result);
+    };
+    socket.setTimeout(5_000, () => finish('timeout'));
+    socket.once('connect', () => finish('connected'));
+    socket.once('error', () => finish('failed'));
+  });
 }
 
 function createTransport(verificationOnly = false) {

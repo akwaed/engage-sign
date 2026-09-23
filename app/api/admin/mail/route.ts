@@ -4,6 +4,7 @@ import { safeErrorCode } from '@/lib/mail-security';
 import { assertSameOrigin } from '@/lib/request-security';
 import {
   dispatchNotifications,
+  probeSmtpTcp,
   queueDueReminders,
   resetFailedNotifications,
   verifyMailConnection,
@@ -33,9 +34,13 @@ export async function POST(request: Request) {
         const code = safeErrorCode(error);
         const status = error && typeof error === 'object' && 'responseCode' in error
           ? Number(error.responseCode) : null;
-        console.warn(`SMTP_VERIFY_FAILED code=${code} status=${Number.isInteger(status) ? status : 'none'}`);
+        const stage = error && typeof error === 'object' && 'command' in error &&
+          /^(CONN|EHLO|STARTTLS|AUTH)$/.test(String(error.command))
+          ? String(error.command) : 'unknown';
+        const tcp = await probeSmtpTcp().catch(() => 'failed');
+        console.warn(`SMTP_VERIFY_FAILED code=${code} status=${Number.isInteger(status) ? status : 'none'} stage=${stage} tcp=${tcp}`);
         return Response.json({
-          error: `SMTP verification failed (${code}${Number.isInteger(status) ? `, status ${status}` : ''}).`,
+          error: `SMTP verification failed (${code}${Number.isInteger(status) ? `, status ${status}` : ''}; stage ${stage}; TCP ${tcp}).`,
         }, { status: 424 });
       }
     }
