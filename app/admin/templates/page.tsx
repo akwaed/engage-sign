@@ -1,5 +1,6 @@
 import type { RowDataPacket } from 'mysql2/promise';
 
+import { PdfTemplateUpload } from '@/components/pdf-template-upload';
 import {
   TemplateManager,
   type TemplateVersionView,
@@ -80,5 +81,12 @@ export default async function TemplatesPage() {
         required: Boolean(field.required),
       })),
   }));
-  return <TemplateManager catalog={templateCatalog} versions={view} />;
+  return (
+    <main className="min-h-screen bg-[#f7f5f2] px-5 py-8 sm:px-8">
+      <div className="mx-auto max-w-6xl">
+        <PdfTemplateUpload />
+        <TemplateManager catalog={templateCatalog} versions={view} />
+      </div>
+    </main>
+  );
 }

@@ -5,7 +5,17 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 export type TemplateField = {
   fieldName: string;
   label: string;
-  fieldType: 'text' | 'date' | 'checkbox' | 'radio' | 'initials' | 'signature';
+  fieldType:
+    | 'text'
+    | 'multiline'
+    | 'date'
+    | 'checkbox'
+    | 'radio'
+    | 'dropdown'
+    | 'initials'
+    | 'signature'
+    | 'email'
+    | 'phone';
   populatedBy: 'admin-fill' | 'participant-fill' | 'signer' | 'system';
   signerRole: string;
   pageNumber: number | null;
@@ -14,6 +24,9 @@ export type TemplateField = {
   width: number | null;
   height: number | null;
   required: boolean;
+  groupKey?: string | null;
+  options?: string[];
+  dateFormat?: string | null;
 };
 
 export function sha256(bytes: Uint8Array) {
@@ -72,6 +85,7 @@ export async function fillPdf(
   bytes: Uint8Array,
   fields: TemplateField[],
   values: Record<string, string>,
+  coordinateSpace: 'grid1000' | 'pdf_points' = 'grid1000',
 ) {
   const document = await PDFDocument.load(bytes);
   const font = await document.embedFont(StandardFonts.Helvetica);
@@ -88,37 +102,85 @@ export async function fillPdf(
       throw new Error(`Field ${field.fieldName} has no PDF coordinates.`);
     const page = document.getPage(field.pageNumber - 1);
     const { width, height } = page.getSize();
-    const x = (field.x / 1000) * width;
-    const y = height - ((field.y + field.height) / 1000) * height;
-    const boxWidth = (field.width / 1000) * width;
-    const boxHeight = (field.height / 1000) * height;
+    const placed =
+      coordinateSpace === 'pdf_points'
+        ? {
+            x: field.x,
+            y: height - field.y - field.height,
+            boxWidth: field.width,
+            boxHeight: field.height,
+          }
+        : {
+            x: (field.x / 1000) * width,
+            y: height - ((field.y + field.height) / 1000) * height,
+            boxWidth: (field.width / 1000) * width,
+            boxHeight: (field.height / 1000) * height,
+          };
     if (field.fieldType === 'checkbox' || field.fieldType === 'radio') {
       if (/^(true|yes|on|1|checked)$/i.test(value))
         page.drawText('X', {
-          x,
-          y,
-          size: Math.min(boxHeight, 16),
+          x: placed.x,
+          y: placed.y,
+          size: Math.min(placed.boxHeight, 16),
           font,
           color: rgb(0, 0, 0),
         });
       continue;
     }
-    const display = value.slice(0, 500);
-    const size = Math.min(11, Math.max(5, boxHeight * 0.7));
-    if (font.widthOfTextAtSize(display, size) > boxWidth)
-      throw new Error(
-        `Test value for ${field.fieldName} does not fit its mapped box.`,
-      );
-    page.drawText(display, {
-      x,
-      y,
-      size,
+    const display = value.slice(0, 2000);
+    const size = Math.min(11, Math.max(5, placed.boxHeight * 0.45));
+    drawWrapped(
+      page,
       font,
-      color: rgb(0, 0, 0),
-      maxWidth: boxWidth,
-    });
+      display,
+      placed.x,
+      placed.y + placed.boxHeight - size,
+      placed.boxWidth,
+      placed.boxHeight,
+      size,
+      field.fieldType === 'multiline',
+    );
   }
   return document.save();
+}
+
+function drawWrapped(
+  page: ReturnType<PDFDocument['getPage']>,
+  font: Awaited<ReturnType<PDFDocument['embedFont']>>,
+  text: string,
+  x: number,
+  top: number,
+  boxWidth: number,
+  boxHeight: number,
+  size: number,
+  wrap: boolean,
+) {
+  const lines: string[] = [];
+  if (!wrap) lines.push(text);
+  else {
+    let current = '';
+    for (const word of text.split(/\s+/)) {
+      const next = current ? `${current} ${word}` : word;
+      if (font.widthOfTextAtSize(next, size) > boxWidth && current) {
+        lines.push(current);
+        current = word;
+      } else current = next;
+    }
+    if (current) lines.push(current);
+  }
+  const lineHeight = size + 2;
+  lines
+    .slice(0, Math.max(1, Math.floor(boxHeight / lineHeight)))
+    .forEach((line, index) => {
+      page.drawText(line, {
+        x,
+        y: top - index * lineHeight,
+        size,
+        font,
+        color: rgb(0, 0, 0),
+        maxWidth: boxWidth,
+      });
+    });
 }
 
 export async function drawSignatureImages(

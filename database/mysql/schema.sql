@@ -67,6 +67,7 @@ CREATE TABLE template_versions (
   source_storage_key VARCHAR(1024) NOT NULL,
   page_count INT UNSIGNED NOT NULL,
   layout_strategy ENUM('docx_merge', 'pdf_overlay', 'acroform') NOT NULL,
+  coordinate_space ENUM('grid1000', 'pdf_points') NOT NULL DEFAULT 'grid1000',
   signer_plan_json JSON NOT NULL,
   lifecycle ENUM('draft', 'active', 'retired') NOT NULL DEFAULT 'draft',
   activated_at DATETIME(6) NULL,
@@ -82,14 +83,17 @@ CREATE TABLE template_fields (
   template_version_id CHAR(36) NOT NULL,
   field_name VARCHAR(190) NOT NULL,
   label VARCHAR(255) NOT NULL,
-  field_type ENUM('text', 'date', 'checkbox', 'radio', 'initials', 'signature') NOT NULL,
+  field_type ENUM('text', 'multiline', 'date', 'checkbox', 'radio', 'dropdown', 'initials', 'signature', 'email', 'phone') NOT NULL,
   populated_by ENUM('admin', 'participant', 'signer', 'system') NOT NULL,
   signer_role VARCHAR(100) NULL,
+  group_key VARCHAR(100) NULL,
+  options_json JSON NULL,
+  date_format VARCHAR(40) NULL,
   page_number INT UNSIGNED NULL,
-  x INT NULL,
-  y INT NULL,
-  width INT NULL,
-  height INT NULL,
+  x DECIMAL(8,2) NULL,
+  y DECIMAL(8,2) NULL,
+  width DECIMAL(8,2) NULL,
+  height DECIMAL(8,2) NULL,
   required BOOLEAN NOT NULL DEFAULT TRUE,
   display_order INT NOT NULL DEFAULT 0,
   KEY template_fields_version_idx (template_version_id),
@@ -329,6 +333,48 @@ BEFORE UPDATE ON legal_exports
 FOR EACH ROW
 BEGIN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Legal export records are immutable';
+END$$
+
+CREATE TRIGGER template_fields_draft_only_update
+BEFORE UPDATE ON template_fields
+FOR EACH ROW
+BEGIN
+  IF (SELECT lifecycle FROM template_versions WHERE id = OLD.template_version_id) <> 'draft' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Published template fields are immutable';
+  END IF;
+END$$
+
+CREATE TRIGGER template_fields_draft_only_delete
+BEFORE DELETE ON template_fields
+FOR EACH ROW
+BEGIN
+  IF (SELECT lifecycle FROM template_versions WHERE id = OLD.template_version_id) <> 'draft' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Published template fields are immutable';
+  END IF;
+END$$
+
+CREATE TRIGGER template_fields_draft_only_insert
+BEFORE INSERT ON template_fields
+FOR EACH ROW
+BEGIN
+  IF (SELECT lifecycle FROM template_versions WHERE id = NEW.template_version_id) <> 'draft' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Published template fields are immutable';
+  END IF;
+END$$
+
+CREATE TRIGGER template_versions_protect_published
+BEFORE UPDATE ON template_versions
+FOR EACH ROW
+BEGIN
+  IF OLD.lifecycle <> 'draft' AND (
+    NEW.source_hash <> OLD.source_hash
+    OR NEW.source_storage_key <> OLD.source_storage_key
+    OR NEW.page_count <> OLD.page_count
+    OR NEW.layout_strategy <> OLD.layout_strategy
+    OR CAST(NEW.signer_plan_json AS CHAR) <> CAST(OLD.signer_plan_json AS CHAR)
+  ) THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Published template versions are immutable';
+  END IF;
 END$$
 
 DELIMITER ;

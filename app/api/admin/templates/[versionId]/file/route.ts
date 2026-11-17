@@ -21,6 +21,7 @@ type Version = RowDataPacket & {
   source_hash: string;
   source_storage_key: string;
   layout_strategy: 'docx_merge' | 'pdf_overlay';
+  coordinate_space?: 'grid1000' | 'pdf_points';
 };
 type FieldRow = RowDataPacket & {
   field_name: string;
@@ -123,7 +124,13 @@ export async function POST(
       const inspection = await inspectTemplate(data, 'docx');
       for (const name of inspection.placeholders) values[name] ??= '';
       pdf = await convertDocxToPdf(mergeDocx(data, values));
-    } else pdf = await fillPdf(data, fields, values);
+    } else
+      pdf = await fillPdf(
+        data,
+        fields,
+        values,
+        version.coordinate_space === 'pdf_points' ? 'pdf_points' : 'grid1000',
+      );
     return fileResponse(pdf, 'pdf');
   } catch (error) {
     return Response.json(
@@ -135,7 +142,7 @@ export async function POST(
 
 async function loadVersion(id: string) {
   const [rows] = await getMysqlPool().query<Version[]>(
-    'SELECT source_hash, source_storage_key, layout_strategy FROM template_versions WHERE id = ? LIMIT 1',
+    'SELECT source_hash, source_storage_key, layout_strategy, coordinate_space FROM template_versions WHERE id = ? LIMIT 1',
     [id],
   );
   if (!rows[0]) throw new Error('Template version not found.');

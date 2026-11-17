@@ -226,6 +226,14 @@ export function TemplateManager({
           <div className="space-y-5">
             <section className="rounded-xl border bg-white p-5">
               <h2 className="text-xl font-semibold">{item.name}</h2>
+              {selected && item.sourceType === 'pdf' ? (
+                <Link
+                  href={`/admin/templates/${selected.id}`}
+                  className="mt-2 inline-block text-sm font-medium text-[#a04d31] underline"
+                >
+                  Open visual editor
+                </Link>
+              ) : null}
               <p className="mt-1 text-sm text-stone-600">
                 Expected source: {item.sourceFilename}
               </p>
