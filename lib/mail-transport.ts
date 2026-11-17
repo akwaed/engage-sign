@@ -39,6 +39,27 @@ export function assertFileMailAllowed(env: MailEnv = process.env) {
     );
 }
 
+export function deliveryOrigin(env: MailEnv = process.env) {
+  const transport = resolveMailTransport(env);
+  if (transport.mode === 'file') return fileMailAppOrigin(env.APP_URL);
+  for (const name of [
+    'SMTP_HOST',
+    'SMTP_USER',
+    'SMTP_PASSWORD',
+    'SMTP_FROM',
+    'APP_URL',
+  ] as const)
+    if (!env[name])
+      throw new Error(`${name} is required before sending documents.`);
+  const origin = new URL(env.APP_URL ?? '');
+  if (origin.protocol !== 'https:' && origin.hostname !== 'localhost')
+    throw new Error('APP_URL must use HTTPS for signing invitations.');
+  const port = Number(env.SMTP_PORT ?? 587);
+  if (port !== 587 && port !== 465)
+    throw new Error('SMTP_PORT must be 587 (STARTTLS) or 465 (TLS).');
+  return origin.origin;
+}
+
 export function fileMailAppOrigin(appUrl = process.env.APP_URL) {
   if (!appUrl) throw new Error('APP_URL is required before sending documents.');
   const url = new URL(appUrl);

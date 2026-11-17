@@ -70,8 +70,11 @@ export async function POST(request: Request) {
       [userId, email, displayName, passwordHash],
     );
     await connection.execute<ResultSetHeader>(
-      'UPDATE system_settings SET setup_completed = 1, updated_at = UTC_TIMESTAMP(6) WHERE id = ?',
-      ['global'],
+      `INSERT INTO system_settings
+        (id, default_expiration_days, reminder_schedule_json, retention_days,
+         updated_by, updated_at, setup_completed)
+       VALUES ('global', 14, JSON_ARRAY(7, 3, 1), NULL, NULL, UTC_TIMESTAMP(6), 1)
+       ON DUPLICATE KEY UPDATE setup_completed = 1, updated_at = UTC_TIMESTAMP(6)`,
     );
     await connection.commit();
   } catch (error) {

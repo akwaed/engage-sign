@@ -49,9 +49,9 @@ INSERT INTO system_settings (
   id, default_expiration_days, reminder_schedule_json, retention_days,
   updated_by, updated_at, setup_completed
 )
-SELECT 'global', 14, JSON_ARRAY(7, 3, 1), NULL, NULL, UTC_TIMESTAMP(6), 1
- WHERE EXISTS (SELECT 1 FROM users)
-   AND NOT EXISTS (SELECT 1 FROM system_settings WHERE id = 'global');
+SELECT 'global', 14, JSON_ARRAY(7, 3, 1), NULL, NULL, UTC_TIMESTAMP(6),
+       IF(EXISTS (SELECT 1 FROM users), 1, 0)
+ WHERE NOT EXISTS (SELECT 1 FROM system_settings WHERE id = 'global');
 
 CREATE TABLE IF NOT EXISTS auth_rate_limits (
   bucket VARCHAR(64) NOT NULL,

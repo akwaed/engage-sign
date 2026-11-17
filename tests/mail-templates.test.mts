@@ -30,12 +30,22 @@ void test('all mail types render branded text and escaped HTML', () => {
     assert.match(result.html, /ENGAGE SIGN/);
     assert.match(result.html, /&lt;Test Recipient&gt;/);
     assert.doesNotMatch(result.html, /Agreement & <terms>/);
-    assert.match(result.text, /Agreement & <terms>/);
+    assert.equal(result.text.includes('Agreement & <terms>'), false);
+    assert.match(result.text, /a document/);
     assert.equal(
       result.text.includes('/s/private-token'),
       kind === 'invite' || kind === 'next_signer',
     );
   }
+  const named = renderMail({
+    kind: 'invite',
+    name: 'Test Recipient',
+    title: 'TB Risk Assessment',
+    expiresAt: new Date('2026-10-01T12:00:00Z'),
+    signingUrl: 'https://sign.example.test/s/private-token',
+    includeTitle: true,
+  });
+  assert.match(named.text, /TB Risk Assessment/);
   assert.equal(notificationKind('reminder_7'), 'reminder');
   assert.throws(() => notificationKind('unknown'), /Unknown/);
 });

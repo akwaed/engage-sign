@@ -9,7 +9,11 @@ import { appendAuditEventInTransaction } from '@/lib/audit';
 import { decryptValue } from '@/lib/encryption';
 import { writeOutgoingMail } from '@/lib/mail-file';
 import { notificationKind, renderMail } from '@/lib/mail-templates';
-import { fileMailAppOrigin, resolveMailTransport } from '@/lib/mail-transport';
+import {
+  deliveryOrigin,
+  fileMailAppOrigin,
+  resolveMailTransport,
+} from '@/lib/mail-transport';
 import { safeErrorCode, sanitizeProviderResponse } from '@/lib/mail-security';
 import { getMysqlPool } from '@/lib/mysql';
 import {
@@ -31,22 +35,7 @@ type OutboxRow = RowDataPacket & {
 };
 
 export function assertMailConfigured() {
-  for (const name of [
-    'SMTP_HOST',
-    'SMTP_USER',
-    'SMTP_PASSWORD',
-    'SMTP_FROM',
-    'APP_URL',
-  ])
-    if (!process.env[name])
-      throw new Error(`${name} is required before sending documents.`);
-  const origin = new URL(process.env.APP_URL!);
-  if (origin.protocol !== 'https:' && origin.hostname !== 'localhost')
-    throw new Error('APP_URL must use HTTPS for signing invitations.');
-  const port = Number(process.env.SMTP_PORT ?? 587);
-  if (port !== 587 && port !== 465)
-    throw new Error('SMTP_PORT must be 587 (STARTTLS) or 465 (TLS).');
-  return origin.origin;
+  return deliveryOrigin();
 }
 
 export async function resetFailedNotifications(envelopeId: string) {
@@ -185,6 +174,7 @@ async function dispatchNotificationsToFile(limit: number, directory: string) {
         title: row.title,
         expiresAt: fromMysqlUtc(row.expires_at),
         signingUrl: token ? `${origin}/s/${token}` : undefined,
+        includeTitle: process.env.MAIL_INCLUDE_DOCUMENT_TITLE === 'true',
       });
       const receipt = await writeOutgoingMail(directory, {
         to: decryptValue(row.email_encrypted, `signer:${row.signer_id}:email`),
@@ -230,6 +220,7 @@ async function dispatchNotificationsBySmtp(limit: number) {
           title: row.title,
           expiresAt: fromMysqlUtc(row.expires_at),
           signingUrl: token ? `${origin}/s/${token}` : undefined,
+          includeTitle: process.env.MAIL_INCLUDE_DOCUMENT_TITLE === 'true',
         });
         const response = await transporter.sendMail({
           from: process.env.SMTP_FROM,

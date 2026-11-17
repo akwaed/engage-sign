@@ -35,9 +35,11 @@ export function renderMail(input: {
   title: string;
   expiresAt: Date;
   signingUrl?: string;
+  includeTitle?: boolean;
 }): MailContent {
   const { kind, name, title, expiresAt, signingUrl } = input;
   const expiry = expiresAt.toUTCString();
+  const named = input.includeTitle ? `"${title}"` : 'a document';
   const subjects: Record<MailKind, string> = {
     invite: 'Engage Sign: document ready for your signature',
     next_signer: 'Engage Sign: it is your turn to sign',
@@ -48,13 +50,13 @@ export function renderMail(input: {
     void: 'Engage Sign: document voided',
   };
   const descriptions: Record<MailKind, string> = {
-    invite: `Please review and sign "${title}" by ${expiry}.`,
-    next_signer: `The prior signer has completed their step. Please review and sign "${title}" by ${expiry}.`,
-    reminder: `This is a reminder to sign "${title}" by ${expiry}. Use your original private invitation link.`,
-    completion: `All required signatures for "${title}" are complete. Contact the administrator for the verified final archive.`,
-    expiration: `The signing period for "${title}" has expired. Its signing links no longer work.`,
-    decline: `A required signer declined "${title}". The document is closed.`,
-    void: `An administrator voided "${title}". Its signing links no longer work.`,
+    invite: `Please review and sign ${named} by ${expiry}.`,
+    next_signer: `The prior signer has completed their step. Please review and sign ${named} by ${expiry}.`,
+    reminder: `This is a reminder to sign ${named} by ${expiry}. Use your original private invitation link.`,
+    completion: `All required signatures for ${named} are complete. Contact the sender for the verified final archive.`,
+    expiration: `The signing period for ${named} has expired. Its signing links no longer work.`,
+    decline: `A required signer declined ${named}. The document is closed.`,
+    void: `The sender canceled ${named}. Its signing links no longer work.`,
   };
   if ((kind === 'invite' || kind === 'next_signer') && !signingUrl)
     throw new Error('An invitation needs a signing URL.');

@@ -17,6 +17,6 @@ APP_URL=http://localhost:3001
 
 `MAIL_FILE_DIR` must be an absolute directory outside the web root. The app creates it mode `0700` and writes each message as a mode `0600` `.eml` file containing `To`, `From`, `Subject`, the text body, and the HTML body. Invitation and reset links are in that file. The directory holds bearer links, so it must not be served by nginx and should be readable only by the staging user.
 
-With file mail selected, the jobs timer and the sign-in reset action write files instead of opening an SMTP connection. `MAIL_ENABLED=false` still skips SMTP. File delivery does not use `SMTP_HOST`. The admin SMTP verify action reports success without contacting Office 365 while file mail is selected.
+With file mail selected, sending a document, the jobs timer, and the password-reset action write files instead of checking or opening SMTP. A staging `SMTP_PORT` such as 2525 is ignored. `MAIL_ENABLED=false` still skips SMTP when `MAIL_TRANSPORT` is unset. The admin SMTP verify action reports success without contacting Office 365 while file mail is selected.
 
 Do not set `MAIL_TRANSPORT=file` on the production unit.

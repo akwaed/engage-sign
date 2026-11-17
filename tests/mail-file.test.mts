@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
+import { readFileSync } from 'node:fs';
 import { writeOutgoingMail } from '../lib/mail-file.ts';
-import { resolveMailTransport } from '../lib/mail-transport.ts';
+import { deliveryOrigin, resolveMailTransport } from '../lib/mail-transport.ts';
 
 const production = {
   NODE_ENV: 'production',
@@ -49,6 +50,49 @@ void test('file mail refuses production and stays off without the allow flag', (
         MAIL_TRANSPORT: 'file',
       }),
     /MAIL_FILE_DIR/,
+  );
+});
+
+void test('file transport does not require an SMTP port', () => {
+  assert.equal(
+    deliveryOrigin({
+      MAIL_TRANSPORT: 'file',
+      MAIL_FILE_DIR: '/var/lib/engage-sign-staging/mail',
+      APP_URL: 'http://localhost:3001',
+      NODE_ENV: 'production',
+      ENGAGE_ALLOW_FILE_MAIL: 'true',
+      SMTP_PORT: '2525',
+    }),
+    'http://localhost:3001',
+  );
+  assert.throws(
+    () =>
+      deliveryOrigin({
+        MAIL_TRANSPORT: 'smtp',
+        APP_URL: 'https://sign.example.test',
+        SMTP_HOST: 'smtp.office365.com',
+        SMTP_USER: 'user',
+        SMTP_PASSWORD: 'secret',
+        SMTP_FROM: 'sign@example.test',
+        SMTP_PORT: '2525',
+      }),
+    /SMTP_PORT must be 587/,
+  );
+});
+
+void test('a fresh database still receives the setup settings row', () => {
+  const sql = readFileSync(
+    new URL('../database/mysql/migrations/004_auth_rbac.sql', import.meta.url),
+    'utf8',
+  );
+  assert.match(sql, /INSERT INTO system_settings/);
+  assert.match(
+    sql,
+    /WHERE NOT EXISTS \(SELECT 1 FROM system_settings WHERE id = 'global'\)/,
+  );
+  assert.equal(
+    sql.includes('WHERE EXISTS (SELECT 1 FROM users)\n   AND NOT EXISTS'),
+    false,
   );
 });
 
