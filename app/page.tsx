@@ -59,7 +59,7 @@ type DocumentRow = RowDataPacket & {
 
 const navigation = [
   { label: 'Overview', icon: LayoutDashboardIcon, href: '/', active: true },
-  { label: 'Documents', icon: FileSignatureIcon, href: '/#documents' },
+  { label: 'Documents', icon: FileSignatureIcon, href: '/documents' },
   { label: 'Templates', icon: FilesIcon, href: '/admin/templates', count: '9' },
   { label: 'Archive', icon: ArchiveIcon, href: '/#archive' },
 ];
@@ -290,6 +290,12 @@ export default async function Home() {
                 <CardDescription>
                   Track partial completion across every assigned signer.
                 </CardDescription>
+                <CardAction>
+                  <Link href="/documents" className="text-sm underline">
+                    All documents
+                    <ArrowUpRightIcon className="ml-1 inline size-4" />
+                  </Link>
+                </CardAction>
               </CardHeader>
               <CardContent className="px-0">
                 <Table>

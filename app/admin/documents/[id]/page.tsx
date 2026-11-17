@@ -68,8 +68,8 @@ export default async function DocumentStatusPage({
   if (!envelope) notFound();
   return (
     <main className="mx-auto max-w-4xl px-5 py-8 text-[#2c2028]">
-      <Link href="/" className="text-sm underline">
-        ← Dashboard
+      <Link href="/documents" className="text-sm underline">
+        ← Documents
       </Link>
       <h1 className="mt-4 text-3xl font-semibold">{envelope.title}</h1>
       <p className="mt-2 text-sm text-stone-600">
@@ -92,6 +92,22 @@ export default async function DocumentStatusPage({
         </div>
       </div>
       <DocumentActions id={id} status={envelope.status} />
+      {envelope.status === 'completed' ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <a
+            className="rounded border bg-white px-4 py-2 text-sm"
+            href={`/api/envelopes/${id}/pdf`}
+          >
+            Download completed PDF
+          </a>
+          <a
+            className="rounded border bg-white px-4 py-2 text-sm"
+            href={`/api/envelopes/${id}/certificate`}
+          >
+            Download audit certificate
+          </a>
+        </div>
+      ) : null}
       <section className="mt-7 rounded-xl border bg-white p-5">
         <h2 className="text-lg font-semibold">Signer progress</h2>
         <div className="mt-4 space-y-3">

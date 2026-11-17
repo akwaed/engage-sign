@@ -11,6 +11,7 @@ import { toMysqlDate } from '@/lib/audit';
 import { convertDocxToPdf } from '@/lib/docx-convert';
 import { decryptValue, encryptValue, valueHash } from '@/lib/encryption';
 import { getMysqlPool } from '@/lib/mysql';
+import { recipientEmailIndex } from '@/lib/recipient-index';
 import {
   readPrivateObject,
   removePrivateObject,
@@ -259,9 +260,9 @@ export async function saveDraft(
       const assignment = plan.find((item) => item.role === recipient.role)!;
       await connection.execute(
         `INSERT INTO signers
-         (id, envelope_id, signer_role, name_encrypted, email_encrypted, routing_order,
+         (id, envelope_id, signer_role, name_encrypted, email_encrypted, email_lookup, routing_order,
           is_required, status, token_hash, token_expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
         [
           signerId,
           id,
@@ -271,6 +272,9 @@ export async function saveDraft(
             recipient.email.trim().toLowerCase(),
             `signer:${signerId}:email`,
           ),
+          process.env.IP_HASH_SECRET
+            ? recipientEmailIndex(recipient.email, process.env.IP_HASH_SECRET)
+            : null,
           input.routingMode === 'parallel' ? 1 : assignment.order,
           assignment.required,
           hashSigningToken(randomUUID()),
