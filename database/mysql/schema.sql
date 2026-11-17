@@ -122,6 +122,7 @@ CREATE TABLE signers (
   signer_role VARCHAR(100) NOT NULL,
   name_encrypted LONGTEXT NOT NULL,
   email_encrypted LONGTEXT NOT NULL,
+  email_lookup CHAR(64) NULL,
   encryption_key_version INT UNSIGNED NOT NULL DEFAULT 1,
   routing_order INT UNSIGNED NOT NULL DEFAULT 1,
   is_required BOOLEAN NOT NULL DEFAULT TRUE,
@@ -134,6 +135,7 @@ CREATE TABLE signers (
   signed_at DATETIME(6) NULL,
   UNIQUE KEY signers_token_hash_unique (token_hash),
   KEY signers_envelope_idx (envelope_id),
+  KEY signers_email_lookup_idx (email_lookup),
   CONSTRAINT signers_envelope_fk FOREIGN KEY (envelope_id) REFERENCES envelopes(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 

@@ -1,10 +1,15 @@
 import type { RowDataPacket } from 'mysql2/promise';
 
+import { appendAuditEvent } from '@/lib/audit';
 import { canReadEnvelope } from '@/lib/auth/rbac';
 import { getStaffUser } from '@/lib/auth/session';
 import { readVerifiedFinalArchive } from '@/lib/finalization';
 import { getMysqlPool } from '@/lib/mysql';
-import { assertSameOrigin } from '@/lib/request-security';
+import {
+  assertSameOrigin,
+  getClientIp,
+  hashClientIp,
+} from '@/lib/request-security';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,6 +39,15 @@ export async function POST(
     );
   try {
     const archive = await readVerifiedFinalArchive(id);
+    await appendAuditEvent({
+      actorType: 'user',
+      actorId: actor.id,
+      envelopeId: id,
+      eventType: 'DOCUMENT_DOWNLOADED',
+      details: { kind: 'final_archive', sha256: archive.hash },
+      ipHash: hashClientIp(getClientIp(request)),
+      userAgent: request.headers.get('user-agent'),
+    });
     return new Response(Uint8Array.from(archive.bytes).buffer, {
       headers: {
         'Content-Type': 'application/zip',
