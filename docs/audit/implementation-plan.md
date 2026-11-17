@@ -1,8 +1,8 @@
 # Implementation plan (phases 2–8)
 
-This plan follows the Phase 1 audit in `docs/audit/phase1-repo-audit.md`. It extends the application that is already in git. It does not replace sign-in, the scrypt password format, session cookies, or the nodemailer SMTP basic-auth client.
+This plan follows the Phase 1 audit in `docs/audit/phase1-repo-audit.md`. The code baseline is `prod-baseline-20260930` (`215be13`), the deployed release `20260930-consent`. It is not `main`. Later branches start there. Do not replace sign-in, the scrypt password format, the `engage_sign_session` cookie, `APP_URL`, or the nodemailer SMTP basic-auth client. Production mail to `smtp.office365.com:587` already works. The GoDaddy egress failure is historical.
 
-No application code is part of the Phase 1 pull request. Do not start Phase 2 against production until the VPS snapshot has been diffed (gate below).
+Phase 2 is implemented on `dev/phase2-auth-rbac`, which targets `prod-baseline-20260930`. Applying its migration on the VPS still needs a backup and an owner window. This pull request does not change the server.
 
 ## Rules for every phase
 
@@ -15,18 +15,32 @@ No application code is part of the Phase 1 pull request. Do not start Phase 2 ag
 - Patient and signer fixtures are fictional. The signed TB PDF is not a fixture.
 - Do not describe the result as HIPAA compliant. Use the gap list in Phase 7 when talking to the owner.
 
-## Gate before Phase 2: match the VPS to git
+## Gate: production matched
 
-`origin/codex/signing-workflow` (`90fc2df`) is `main` (`e062648`) plus the template and signing work. Auth files match. SMTP exists only on the branch, as nodemailer basic auth (`SMTP_USER` / `SMTP_PASSWORD`, STARTTLS on 587, TLS on 465, certificate verification on).
+The snapshot is release `20260930-consent`. It was built from local `codex/vps-migration` at `4c81f9d` with production-only edits, and it did not match `main` or `origin/codex/signing-workflow`. `prod-baseline-20260930` is that tree.
 
-When the production snapshot arrives:
+Known host facts, already recorded so they are not guessed again:
 
-1. Diff it to `e062648` and to `90fc2df`. Record the commit or the file-level drift in `docs/audit/` (a short addendum, not a new product).
-2. If production matches `90fc2df`, base the feature branches on that branch and merge it only through review. Do not reimplement `lib/signing-mail.ts`, `lib/encryption.ts`, `lib/private-storage.ts`, `lib/auth/*`, or the recipient cookie exchange.
-3. If production matches `main` but SMTP works on the VPS, the mailer is outside this repo (local relay, or a file that was never pushed). Find that path before editing mail. Prefer adopting the branch's nodemailer client over writing a third sender, and keep basic auth.
-4. If production matches neither, list the drift and reconcile before any migration. Do not assume the September 2026 GoDaddy notes still describe the host. Those notes reported `EACCES` to `smtp.office365.com:587` and an unpublished app. The owner now reports a working VPS. Trust the snapshot.
+- systemd `engage-sign-vps.service`, nginx TLS, loopback port 3000. nginx replaces forwarded headers.
+- `PRIVATE_STORAGE_PATH=/var/lib/engage-sign-vps/private`.
+- MySQL `engage_sign_vps` on 127.0.0.1. Migrations `000`–`003` are in `schema_migrations`.
+- Jobs timer every 60 seconds. SMTP basic auth works when `MAIL_ENABLED=true`.
+- `POST /api/setup` does not check `SETUP_TOKEN`. Phase 2 puts that check back and adds a permanent lock so emptying `users` cannot reopen setup.
 
-Also record, from the VPS audit rather than from guesswork: the process manager, the TLS terminator, whether `X-Forwarded-*` headers are overwritten, `NODE_ENV`, the real `PRIVATE_STORAGE_PATH`, and whether Preview and production share a database. The repo cannot answer those.
+Do not reimplement `lib/signing-mail.ts`, `lib/encryption.ts`, `lib/private-storage.ts`, or the recipient cookie exchange. Extend them.
+
+## Ops, owner approval required
+
+Do not perform these from an application pull request. They change the host.
+
+- Turn SSH password authentication off after confirming key access. Root login is already `without-password`.
+- Enable `ufw` for 22, 80, and 443, and install fail2ban.
+- Move backups off the VPS, separate the backup key from the host, stop pausing the app for the dump, and prune old archives.
+- Tighten `/var/lib/engage-sign-vps/imports` (currently 0777, files 0666).
+- Apply OS updates (about 66 packages) in a maintenance window.
+- Decide whether `vps-c38077a1.vps.ovh.us` should keep serving production.
+- Decide on full-disk encryption before any real PHI. Application field encryption does not cover PDF bytes.
+- Approve a staging host if one is wanted. None exists. It needs its own database, keys, and a mail allowlist. Do not copy production rows into it.
 
 ## Phase 2 — Auth and user management
 
@@ -293,6 +307,8 @@ Runner: the signing branch's `node --experimental-strip-types --test`. Add `npm 
 Database tests can run against MySQL in CI if a service container is acceptable. If not, keep pure unit tests in CI and document a local `mysql` import for integration tests. Do not point tests at production.
 
 ## Rollback
+
+Production deploy is a release directory under `/opt/engage-sign-vps/releases`, with `current` as the symlink, then a restart of `engage-sign-vps.service`. Rolling back the app is pointing `current` at the previous release (`20260930-consent` until a newer release is cut) and restarting. Do that only after a database dump. Phase 2's migration adds columns and tables with defaults. The previous build does not read those columns, so it still boots. Do not drop the new columns to roll back. If the migration itself fails mid-way, restore the dump taken immediately before it. The daily backup currently stops the app. A pre-migration dump should use `--single-transaction` and must not be committed to git.
 
 Before the first production migration of a phase:
 

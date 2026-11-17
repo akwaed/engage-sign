@@ -1,8 +1,20 @@
 # Phase 1 repository audit
 
-Audit date: 2026-11-17. This pass read the git repository only. It did not start the app, did not connect to `https://sign.engagess.co`, and did not change application code. A separate read-only review of the production VPS is expected later. Until that snapshot is compared with git, this document does not claim which commit is deployed.
+Audit date: 2026-11-17. The first pass read git only. The same day, a read-only VPS audit and a source snapshot of release `20260930-consent` were compared with git. This document now uses that snapshot as the description of production. Nothing on the server was changed.
 
 The attached Kentucky TB form was inspected locally for structure (page count, images, text layer, AcroForm). None of its handwritten entries, signature, or other personal data is copied here.
+
+## Production baseline
+
+`https://sign.engagess.co` is the OVH VPS `vps-c38077a1` (Ubuntu 24.04). nginx 1.24 terminates TLS and proxies to `127.0.0.1:3000`. systemd unit `engage-sign-vps.service` runs Node 22.23.3 as user `engage-sign` from `/opt/engage-sign-vps/current` → `releases/20260930-consent`. MySQL 8.0.46 on loopback holds database `engage_sign_vps`. The app user has only SELECT, INSERT, UPDATE, and DELETE. Migrations `000` through `003` are recorded in `schema_migrations`. Private files are in `/var/lib/engage-sign-vps/private` (mode 0700). `engage-sign-jobs.timer` runs `scripts/vps/jobs.ts` every 60 seconds (expiration, reminders, outbox). A daily backup timer runs at 06:00 UTC.
+
+The deployed tree was not on any GitHub branch. The build checkout was local branch `codex/vps-migration` at orphan commit `4c81f9d`, plus uncommitted production changes. That tree is now `prod-baseline-20260930` at `215be13`, parent `4c81f9d`. It is the baseline for later work. `main` (`e062648`) is an older staff-auth snapshot and is not what production runs.
+
+Production SMTP is nodemailer to `smtp.office365.com:587` with STARTTLS and basic auth (`SMTP_USER` / `SMTP_PASSWORD`, no OAuth). Journaled sends succeed. The September 2026 note that GoDaddy blocked port 587 describes the old host, not this VPS. `MAIL_ENABLED` must be `true` for the timer to dispatch.
+
+Compared with `4c81f9d`, the release removes the GoDaddy, Cloudflare, vinext, ChatGPT-auth, and Drizzle paths, rewrites mail, finalization, and archive code, and removes the `SETUP_TOKEN` check from `POST /api/setup`. First-admin setup is gated only by an empty `users` table.
+
+nginx overwrites `Host`, `X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Forwarded-For`, and `X-Real-IP`. The forwarded-header concern in the original repo pass is mitigated on this vhost. A second vhost, `vps-c38077a1.vps.ovh.us`, proxies to the same app.
 
 ## 1. What is in git
 
@@ -16,9 +28,9 @@ The attached Kentucky TB form was inspected locally for structure (page count, i
 
 `lib/auth/password.ts`, `lib/auth/session.ts`, and the login, logout, setup, and user-admin routes are the same on `main` and on the signing branch. Later phases should extend that code, not replace it.
 
-The signing branch's own deployment notes (`docs/GODADDY_DEPLOYMENT.md` at `90fc2df`) say that on 2026-09-23 GoDaddy Preview was tracking that branch, outbound TCP to `smtp.office365.com:587` failed with `EACCES` before authentication, LibreOffice was not on the host, and the app had not been published live. The current owner report is different: the service is on a Linux VPS at `https://sign.engagess.co`, and Microsoft 365 SMTP basic auth works. Both can be true if the host changed after those notes. This audit does not treat the September notes as the current production state, and it does not treat `main` as the running app.
+`docs/GODADDY_DEPLOYMENT.md` on `90fc2df` records that on 2026-09-23 GoDaddy Preview blocked TCP to `smtp.office365.com:587` with `EACCES`. That note is historical. Production mail on the VPS works. LibreOffice is installed at `/usr/bin/soffice`.
 
-There is no nginx, Caddy, systemd, Docker, or shell deploy script anywhere in history. The only deployment write-up is the GoDaddy managed Node guide.
+The GitHub history before `prod-baseline-20260930` has no nginx unit, systemd unit, or VPS deploy script. Those live on the server, outside the release tarball. `docs/VPS_MIGRATION.md` in the baseline is still a planning checklist and does not match the running host line for line.
 
 ## 2. Stack
 
@@ -309,45 +321,46 @@ Self-service reset, invite mail, the three staff roles plus publish permission, 
 
 ## 11. Findings, highest severity first
 
-Severity is about the current repository and the healthcare use that is planned. It is not a claim about the live VPS.
+Severity covers the production release `20260930-consent` and the healthcare use that is planned.
 
 ### Critical
 
-1. **Deployed code is not identified.** `main` has no mailer. The only SMTP basic-auth client is unmerged, and that branch's notes say the previous host blocked `smtp.office365.com:587`. The owner says VPS SMTP basic auth currently works. Editing mail, sessions, or MySQL before diffing the VPS tree against `e062648` and `90fc2df` can break sign-in or mail. Gate: snapshot comparison, then extend the tree that is actually running.
+1. **Resolved by `prod-baseline-20260930`.** The running source is that branch (`215be13`), not `main`. Further work branches from it. Do not merge it into `main` as if `main` were production.
 
 ### High
 
-2. **Staff can read every document title** on the signing-branch dashboard (`app/page.tsx` query has no `created_by` predicate). Titles are plaintext. A clinical title would be exposed across employees. Detail routes being admin-only does not fix the list.
-3. **Role model cannot express the requested jobs.** Binary `admin`/`staff`, with send/template/mail/export hard-coded to admin. No publish grant, no own-history scope, no way to change a role after create.
-4. **Password reset is not self-service and not mailed.** Administrators set a password in the browser and must hand it over. The unused `password_reset_tokens` table is the right place to store a hash; nothing writes it. Reset does revoke sessions, which is the behavior to keep.
-5. **Audit evidence is not tamper-evident against a database administrator.** Unkeyed hash, cascade delete from `envelopes`, mutable `signature_events`, IP column unused, no verifier. Fine as a start for staff actions. Not sufficient for a signature certificate.
-6. **Unsalted SHA-256 of field plaintext** (`value_hash`) undoes encryption for low-entropy answers (yes/no, dates).
-7. **Ordinary email contains the envelope title and the recipient name**, and the invitation URL contains the raw token. No PDF is attached, which matches the requested default. The title does not.
-8. **New templates cannot be added without a code change.** Upload rejects any slug outside `templateCatalog`. The TB form cannot be introduced by an operator, and the signed scan must not be forced through that importer.
-9. **Forwarded-header origin trust.** `getPublicOrigin` prefers the client-supplied leftmost `X-Forwarded-Host` when the proto is `http` or `https`. A reverse proxy that appends instead of replacing lets a caller choose the origin used for the CSRF check. `SameSite=Lax` still blocks the usual cross-site cookie post. The proxy configuration is not in git, so this stays high until the VPS web server is confirmed to overwrite those headers.
-10. **Full legal export from any admin session**, including a WebMCP tool on the dashboard, with no step-up. The ZIP is designed to contain participant data once signing is real.
+2. **`POST /api/setup` no longer checks `SETUP_TOKEN`.** It creates an administrator whenever `users` is empty. Production has two users, so the page redirects away today. Emptying `users` would let anyone who can reach `/setup` claim admin. Restore a token check and a permanent setup-completed flag. `SETUP_TOKEN` is still present in the server environment.
+3. **Staff can read every document title** on the production dashboard (`app/page.tsx` has no `created_by` predicate). Titles are plaintext. Detail routes are admin-only, which does not fix the list.
+4. **Role model cannot express the requested jobs.** Binary `admin`/`staff`, with send/template/mail/export hard-coded to admin. No publish grant, no own-history scope, no way to change a role after create.
+5. **Password reset is not self-service and not mailed.** Administrators set a password in the browser and must hand it over. The unused `password_reset_tokens` table is the right place to store a hash; nothing writes it. Reset does revoke sessions, which is the behavior to keep.
+6. **Audit evidence is not tamper-evident against a database administrator.** Unkeyed hash, cascade delete from `envelopes`, mutable `signature_events`, IP column unused, no verifier. Fine as a start for staff actions. Not sufficient for a signature certificate.
+7. **Unsalted SHA-256 of field plaintext** (`value_hash`) undoes encryption for low-entropy answers (yes/no, dates).
+8. **Ordinary email contains the envelope title and the recipient name**, and the invitation URL contains the raw token. No PDF is attached, which matches the requested default. The title does not.
+9. **New templates cannot be added without a code change.** Upload rejects any slug outside `templateCatalog`. The TB form cannot be introduced by an operator, and the signed scan must not be forced through that importer.
+10. **Forwarded headers.** `getPublicOrigin` still prefers `X-Forwarded-Host`. On this VPS nginx replaces those headers, so a browser cannot spoof them through the public vhost. Keep that proxy behavior. Direct access to port 3000 is not exposed (the process binds loopback).
+11. **Full legal export from any admin session**, including a WebMCP tool on the dashboard, with no step-up. The ZIP is designed to contain participant data once signing is real.
 
 ### Medium
 
-11. Login lockout is per email only, and the error page distinguishes unknown, locked, and disabled. No rate limit on setup, export, signing, or the mail runner.
-12. Staff cookie `Secure` follows `NODE_ENV`, not the HTTPS public origin. A production process started without `NODE_ENV=production` would send the session cookie to HTTP.
-13. API errors return internal `Error.message` strings (checksum failures, missing binaries, field names).
-14. PDF editor cannot drag, resize, align, or zoom, and export is single-line Helvetica. Word send depends on LibreOffice, which the previous host did not have.
-15. No scheduler for reminders or expiry. Expiry also runs as a side effect of `GET /`.
-16. Invitation token rotation happens before SMTP success. Combined with a manual mail runner, a failed send is operator-visible only on `/admin/mail`.
-17. Drizzle SQLite schema and `npm run db:generate` can be mistaken for the production migration path. GoDaddy Import SQL is documented as dropping tables.
-18. Tests that exist are not in CI. Nothing covers auth, RBAC, or cross-user access.
-19. `app/chatgpt-auth.ts` is unused but would trust forgeable headers if wired up later.
+12. Login lockout is per email only, and the error page distinguishes unknown, locked, and disabled. There is no per-IP or global limit on login, setup, signing links, or the mail runner.
+13. Staff cookie `Secure` follows `NODE_ENV`. The unit's environment file sets `NODE_ENV`. Confirm that value stays `production` so the cookie is not sent on plain HTTP.
+14. API errors return internal `Error.message` strings (checksum failures, missing binaries, field names).
+15. PDF editor cannot drag, resize, align, or zoom, and export is single-line Helvetica. Word conversion uses `/usr/bin/soffice` on the VPS.
+16. **Final PDFs, templates, and the imports directory are plaintext on disk.** AES-256-GCM covers signer identity, field values, and signature images. It does not cover the PDF bytes. Disk encryption is an owner decision before real PHI.
+17. **Staff sessions last 12 hours absolute with no idle timeout.** `last_seen_at` is updated and does not shorten or extend expiry.
+18. `GET /` still calls `expireDueEnvelopes()`. The 60-second jobs timer also expires envelopes, queues reminders, and dispatches the outbox when `MAIL_ENABLED=true`.
+19. Invitation token rotation happens before SMTP success. A retry mints a new token. Delivery state is visible on `/admin/mail`.
+20. Tests exist (`npm test`, 13 cases on the baseline) and CI does not run them. Nothing covers auth, RBAC, or cross-user access.
 
 ### Low
 
-20. `GET /api/health` discloses database reachability.
-21. First-admin audit details include the email address.
-22. HSTS is set in the app; certificate issuance and HTTP-to-HTTPS redirect are outside the repo.
-23. `safeReturnTo` does not reject `/\` sequences. Redirects are absolute URLs built with the WHATWG parser, so this is not an open redirect in Node, and it should still be tightened.
-24. No `__Host-` cookie prefix. Session length is fixed at 12 hours, which is reasonable, and there is no idle timeout.
-25. Failed logins are not audit events. The failure counter resets to 0 when the lock starts, so the count is not historical.
-26. Signing-branch deployment notes include a hosting app id and local backup paths.
+21. `GET /api/health` is unauthenticated. On production it reports `status`, `database`, and `storage` (`ready` / `connected`).
+22. **No global Content-Security-Policy.** The PDF file route sets a sandbox policy. HTML responses do not.
+23. nginx access logs are off (error log is `crit`), so the edge has no request trail. Signing-token paths would need redaction before access logs are enabled.
+24. First-admin audit details include the email address.
+25. HSTS is set in the app. nginx redirects port 80 to HTTPS. Certificates renew via certbot (sign.engagess.co expires 2026-12-27; the ovh.us vhost expires 2026-12-22).
+26. `safeReturnTo` does not reject `/\` sequences. Redirects are absolute URLs built with the WHATWG parser, so this is not an open redirect in Node, and it should still be tightened.
+27. No `__Host-` cookie prefix. Failed logins are not audit events. The failure counter resets to 0 when the lock starts, so the count is not historical.
 
 ## 12. Secrets in git history
 
@@ -372,6 +385,19 @@ File inspected outside the repo: the uploaded signed TB PDF. It was not copied i
 
 Use an authoritative blank from the Kentucky Department for Public Health, or redraw the official questions onto a clean page. Do not check the signed scan into git, do not put it in `tests/` or `public/`, and do not "clean" it by painting white boxes over the handwriting. Residual image data would still be the original scan.
 
-## 14. HIPAA
+## 14. Ops items that need owner approval
+
+These are properties of the VPS, not of the application repo. This project must not change the server to "fix" them. They need an explicit owner decision and a change window.
+
+- SSH allows password authentication (`PasswordAuthentication yes`). `PermitRootLogin` is `without-password`. Prefer key-only SSH.
+- `ufw` is inactive. Public listeners are 22, 80, and 443. fail2ban is not installed.
+- Backups stay on the same VPS, and the backup decryption key is on that host (`/etc/engage-sign-vps/backup.key`). There is no off-site copy and no pruning. The daily job stops the app during the dump.
+- `/var/lib/engage-sign-vps/imports` is mode 0777 and the files in it are mode 0666. It holds the nine source business documents.
+- About 66 OS packages are upgradable. Schedule patching separately from app deploys.
+- The `ovh.us` hostname serves the same production app. Decide whether that origin should stay.
+- Full-disk encryption for private storage is not in place. Required before real PHI, and it is an infrastructure change.
+- Staging, as sketched in the VPS notes (`staging.sign.engagess.co`, a second unit, a separate database and key), does not exist. Creating it needs DNS, a certificate, and new secrets.
+
+## 15. HIPAA
 
 This repository does not implement HIPAA. It does not, and a later coding phase will not, make the organization compliant. Section 7 of the implementation plan lists controls the software can add and the obligations the software cannot satisfy (agreements, policies, risk analysis, training, and the rest).
