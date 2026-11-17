@@ -169,6 +169,7 @@ export async function saveDraft(
   input: EnvelopeInput,
   actorId: string,
   existingId?: string,
+  allowAnyOwner = false,
 ) {
   const connection = await getMysqlPool().getConnection();
   const id = existingId ?? randomUUID();
@@ -179,7 +180,11 @@ export async function saveDraft(
         'SELECT * FROM envelopes WHERE id = ? FOR UPDATE',
         [existingId],
       );
-      if (!old[0] || old[0].status !== 'draft' || old[0].created_by !== actorId)
+      if (
+        !old[0] ||
+        old[0].status !== 'draft' ||
+        (old[0].created_by !== actorId && !allowAnyOwner)
+      )
         throw new Error('Only your unsent draft can be edited.');
       await connection.execute('DELETE FROM signers WHERE envelope_id = ?', [
         id,
@@ -299,7 +304,11 @@ export async function saveDraft(
   }
 }
 
-export async function sendDraft(envelopeId: string, actorId: string) {
+export async function sendDraft(
+  envelopeId: string,
+  actorId: string,
+  allowAnyOwner = false,
+) {
   assertMailConfigured();
   const connection = await getMysqlPool().getConnection();
   let fileKey: string | null = null;
@@ -313,7 +322,7 @@ export async function sendDraft(envelopeId: string, actorId: string) {
     if (
       !envelope ||
       envelope.status !== 'draft' ||
-      envelope.created_by !== actorId
+      (envelope.created_by !== actorId && !allowAnyOwner)
     )
       throw new Error('Only your unsent draft can be sent.');
     if (fromMysqlUtc(envelope.expires_at).getTime() <= Date.now())
@@ -406,7 +415,11 @@ export async function sendDraft(envelopeId: string, actorId: string) {
   }
 }
 
-export async function voidEnvelope(envelopeId: string, actorId: string) {
+export async function voidEnvelope(
+  envelopeId: string,
+  actorId: string,
+  allowAnyOwner = false,
+) {
   const connection = await getMysqlPool().getConnection();
   try {
     await connection.beginTransaction();
@@ -416,7 +429,7 @@ export async function voidEnvelope(envelopeId: string, actorId: string) {
     );
     if (
       !rows[0] ||
-      rows[0].created_by !== actorId ||
+      (rows[0].created_by !== actorId && !allowAnyOwner) ||
       ['completed', 'declined', 'expired', 'voided'].includes(rows[0].status)
     )
       throw new Error('This document cannot be voided.');

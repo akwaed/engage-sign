@@ -66,6 +66,25 @@ export function renderMail(input: {
   return { subject: subjects[kind], text, html };
 }
 
+export function renderAccountMail(input: {
+  kind: 'password_reset' | 'account_invite';
+  url: string;
+  expiresAt: Date;
+}): MailContent {
+  const expiry = input.expiresAt.toUTCString();
+  const subject =
+    input.kind === 'account_invite'
+      ? 'Engage Sign: set your password'
+      : 'Engage Sign: reset your password';
+  const description =
+    input.kind === 'account_invite'
+      ? `An Engage Sign account is ready. Set your password by ${expiry}.`
+      : `A password reset was requested for your Engage Sign account. This link expires at ${expiry}.`;
+  const text = `${description}\n\n${input.url}\n\nIf you did not expect this message, you can ignore it.\n\nEngage Sign\n`;
+  const html = `<!doctype html><html><body style="margin:0;background:#faf5f2;font-family:Arial,sans-serif;color:#2c2028"><div style="max-width:560px;margin:32px auto;padding:28px;background:#fff;border:1px solid #e7d9d1;border-radius:12px"><p style="margin:0;color:#b84b2d;font-weight:bold;letter-spacing:.08em">ENGAGE SIGN</p><h1 style="font-size:24px;line-height:1.25">${escapeHtml(subject)}</h1><p>${escapeHtml(description)}</p><p><a href="${escapeHtml(input.url)}" style="display:inline-block;background:#ed6435;color:#fff;padding:12px 18px;border-radius:6px;text-decoration:none">Set password</a></p><p style="font-size:12px;color:#6b5d63">If you did not expect this message, you can ignore it.</p></div></body></html>`;
+  return { subject, text, html };
+}
+
 function escapeHtml(value: string) {
   return value.replace(
     /[&<>"']/g,

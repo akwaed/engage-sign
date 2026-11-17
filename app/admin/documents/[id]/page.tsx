@@ -3,7 +3,8 @@ import { notFound } from 'next/navigation';
 import type { RowDataPacket } from 'mysql2/promise';
 
 import { DocumentActions } from '@/components/document-actions';
-import { requireAdmin } from '@/lib/auth/session';
+import { canReadAllDocuments } from '@/lib/auth/rbac';
+import { requireStaffUser } from '@/lib/auth/session';
 import { decryptValue } from '@/lib/encryption';
 import { getMysqlPool } from '@/lib/mysql';
 import { expireDueEnvelopes } from '@/lib/envelope-expiration';
@@ -39,17 +40,19 @@ export default async function DocumentStatusPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAdmin('/admin/documents');
+  const user = await requireStaffUser(`/admin/documents/${(await params).id}`);
   await expireDueEnvelopes();
   const { id } = await params;
   if (!/^[a-f0-9-]{36}$/i.test(id)) notFound();
+  const seeAll = canReadAllDocuments(user) ? 1 : 0;
   const [[envelopes], [signers]] = await Promise.all([
     getMysqlPool().query<Envelope[]>(
       `SELECT e.id, e.title, e.status, e.expires_at, e.routing_mode, e.locked_at,
               t.name AS template_name, v.version_number
        FROM envelopes e JOIN template_versions v ON v.id = e.template_version_id
-       JOIN templates t ON t.id = v.template_id WHERE e.id = ?`,
-      [id],
+       JOIN templates t ON t.id = v.template_id
+       WHERE e.id = ? AND (? = 1 OR e.created_by = ?)`,
+      [id, seeAll, user.id],
     ),
     getMysqlPool().query<Signer[]>(
       `SELECT s.id, s.signer_role, s.name_encrypted, s.email_encrypted, s.status,

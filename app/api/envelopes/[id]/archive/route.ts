@@ -1,5 +1,9 @@
+import type { RowDataPacket } from 'mysql2/promise';
+
+import { canReadEnvelope } from '@/lib/auth/rbac';
 import { getStaffUser } from '@/lib/auth/session';
 import { readVerifiedFinalArchive } from '@/lib/finalization';
+import { getMysqlPool } from '@/lib/mysql';
 import { assertSameOrigin } from '@/lib/request-security';
 
 export const runtime = 'nodejs';
@@ -15,14 +19,19 @@ export async function POST(
     return Response.json({ error: 'Invalid request origin.' }, { status: 403 });
   }
   const actor = await getStaffUser();
-  if (!actor || actor.role !== 'admin')
-    return Response.json(
-      { error: 'Administrator access is required.' },
-      { status: 403 },
-    );
+  if (!actor)
+    return Response.json({ error: 'Sign in is required.' }, { status: 401 });
   const { id } = await context.params;
   if (!/^[a-f0-9-]{36}$/i.test(id))
     return Response.json({ error: 'Invalid document ID.' }, { status: 400 });
+  const [owners] = await getMysqlPool().query<
+    Array<RowDataPacket & { created_by: string }>
+  >('SELECT created_by FROM envelopes WHERE id = ? LIMIT 1', [id]);
+  if (!owners[0] || !canReadEnvelope(actor, owners[0].created_by))
+    return Response.json(
+      { error: 'You do not have access to that document.' },
+      { status: 403 },
+    );
   try {
     const archive = await readVerifiedFinalArchive(id);
     return new Response(Uint8Array.from(archive.bytes).buffer, {

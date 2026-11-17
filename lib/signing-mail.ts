@@ -250,6 +250,29 @@ export async function probeSmtpTcp() {
   });
 }
 
+export async function sendConfiguredMail(message: {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+}) {
+  assertMailConfigured();
+  const transporter = createTransport();
+  try {
+    const response = await transporter.sendMail({
+      from: process.env.SMTP_FROM,
+      replyTo: process.env.SMTP_REPLY_TO || undefined,
+      to: message.to,
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
+    });
+    return sanitizeProviderResponse(response.response);
+  } finally {
+    transporter.close();
+  }
+}
+
 function createTransport(verificationOnly = false) {
   const port = Number(process.env.SMTP_PORT ?? 587);
   return nodemailer.createTransport({

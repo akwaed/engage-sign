@@ -1,5 +1,6 @@
-import { getMysqlPool } from '../../lib/mysql';
+import { dispatchAccountNotifications } from '../../lib/auth/account-mail';
 import { expireDueEnvelopes } from '../../lib/envelope-expiration';
+import { getMysqlPool } from '../../lib/mysql';
 import {
   queueDueReminders,
   dispatchNotifications,
@@ -10,6 +11,7 @@ try {
   const reminders = await queueDueReminders();
   const enabled = process.env.MAIL_ENABLED === 'true';
   const results = enabled ? await dispatchNotifications(10) : [];
+  const accountMail = enabled ? await dispatchAccountNotifications(10) : [];
   console.log(
     JSON.stringify({
       expired,
@@ -17,6 +19,8 @@ try {
       mailEnabled: enabled,
       sent: results.filter((r) => r.sent).length,
       failed: results.filter((r) => !r.sent).length,
+      accountSent: accountMail.filter((r) => r.sent).length,
+      accountFailed: accountMail.filter((r) => !r.sent).length,
     }),
   );
 } catch {

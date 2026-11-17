@@ -1,4 +1,5 @@
 import { FileSignatureIcon, ShieldCheckIcon } from 'lucide-react';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { getStaffUser, safeReturnTo } from '@/lib/auth/session';
@@ -60,6 +61,11 @@ export default async function LoginPage({
                 {error}
               </p>
             ) : null}
+            {first(query.reset) === 'complete' ? (
+              <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                Password updated. Sign in with the new password.
+              </p>
+            ) : null}
             {first(query.setup) === 'complete' ? (
               <p className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
                 Administrator created. Sign in to continue.
@@ -96,6 +102,11 @@ export default async function LoginPage({
                 Sign in
               </Button>
             </form>
+            <p className="mt-4 text-center text-sm">
+              <Link className="underline" href="/forgot">
+                Forgot password
+              </Link>
+            </p>
             <div className="mt-5 flex gap-2 rounded-lg bg-[#faf9f7] p-3 text-xs leading-5 text-muted-foreground">
               <ShieldCheckIcon className="mt-0.5 size-4 shrink-0 text-[#a04d31]" />
               Sessions expire after 12 hours. Five failed attempts temporarily
@@ -120,5 +131,7 @@ function loginError(code: string | null) {
     return 'This account has been disabled. Contact an administrator.';
   if (code === 'request')
     return 'The sign-in request could not be verified. Please try again.';
+  if (code === 'limited')
+    return 'Too many sign-in attempts from this network. Try again later.';
   return null;
 }

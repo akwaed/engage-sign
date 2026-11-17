@@ -4,7 +4,8 @@ import {
   SendDocumentForm,
   type SendTemplate,
 } from '@/components/send-document-form';
-import { requireAdmin } from '@/lib/auth/session';
+import { canSendDocuments } from '@/lib/auth/rbac';
+import { requireUser } from '@/lib/auth/session';
 import { decryptValue } from '@/lib/encryption';
 import { getMysqlPool } from '@/lib/mysql';
 
@@ -31,7 +32,7 @@ export default async function SendDocumentPage({
 }: {
   searchParams: Promise<{ draft?: string }>;
 }) {
-  const actor = await requireAdmin('/admin/send');
+  const actor = await requireUser('/admin/send', canSendDocuments);
   const { draft: draftId } = await searchParams;
   const [[versions], [fields], [settings]] = await Promise.all([
     getMysqlPool().query<TemplateRow[]>(

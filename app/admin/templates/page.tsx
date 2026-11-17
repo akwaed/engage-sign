@@ -4,7 +4,8 @@ import {
   TemplateManager,
   type TemplateVersionView,
 } from '@/components/template-manager';
-import { requireAdmin } from '@/lib/auth/session';
+import { canEditTemplates } from '@/lib/auth/rbac';
+import { requireUser } from '@/lib/auth/session';
 import { getMysqlPool } from '@/lib/mysql';
 import { templateCatalog } from '@/lib/template-catalog';
 
@@ -35,7 +36,7 @@ type FieldRow = RowDataPacket & {
 };
 
 export default async function TemplatesPage() {
-  await requireAdmin('/admin/templates');
+  await requireUser('/admin/templates', canEditTemplates);
   const pool = getMysqlPool();
   const [[versions], [fields]] = await Promise.all([
     pool.query<VersionRow[]>(
