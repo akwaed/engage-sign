@@ -54,6 +54,7 @@ type TemplateRow = RowDataPacket & {
   source_hash: string;
   source_storage_key: string;
   layout_strategy: 'docx_merge' | 'pdf_overlay';
+  coordinate_space?: 'grid1000' | 'pdf_points';
   lifecycle: string;
   signer_plan_json:
     | string
@@ -373,7 +374,12 @@ export async function sendDraft(
       for (const name of inspection.placeholders) textValues[name] ??= '';
       pdf = await convertDocxToPdf(mergeDocx(source, textValues));
     } else {
-      pdf = await fillPdf(source, fields.map(toTemplateField), textValues);
+      pdf = await fillPdf(
+        source,
+        fields.map(toTemplateField),
+        textValues,
+        template.coordinate_space === 'pdf_points' ? 'pdf_points' : 'grid1000',
+      );
     }
     const documentId = randomUUID();
     fileKey = await storePrivateObject('documents', envelopeId, 'pdf', pdf);

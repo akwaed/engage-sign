@@ -348,12 +348,13 @@ export async function submitSignature(
       Array<
         RowDataPacket & {
           layout_strategy: string;
+          coordinate_space?: 'grid1000' | 'pdf_points';
           source_storage_key: string;
           source_hash: string;
         }
       >
     >(
-      'SELECT layout_strategy, source_storage_key, source_hash FROM template_versions WHERE id = ?',
+      'SELECT layout_strategy, coordinate_space, source_storage_key, source_hash FROM template_versions WHERE id = ?',
       [envelope.template_version_id],
     );
     const template = templates[0];
@@ -432,7 +433,12 @@ export async function submitSignature(
           ([name]) => allowed.get(name)?.field_type !== 'signature' || !png,
         ),
       );
-      pdf = await fillPdf(pdf, assigned.map(toTemplateField), overlayValues);
+      pdf = await fillPdf(
+        pdf,
+        assigned.map(toTemplateField),
+        overlayValues,
+        template.coordinate_space === 'pdf_points' ? 'pdf_points' : 'grid1000',
+      );
       if (png)
         pdf = await drawSignatureImages(
           pdf,

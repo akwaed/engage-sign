@@ -19,6 +19,11 @@ import {
 } from '@/lib/request-security';
 import { templateCatalog } from '@/lib/template-catalog';
 import {
+  createPdfTemplate,
+  duplicateTemplateVersion,
+} from '@/lib/template-create';
+import { assertDraftMutable } from '@/lib/template-permissions';
+import {
   inspectTemplate,
   sha256,
   type TemplateField,
@@ -35,6 +40,7 @@ type VersionRow = RowDataPacket & {
   layout_strategy: 'docx_merge' | 'pdf_overlay';
   page_count: number;
   lifecycle: 'draft' | 'active' | 'retired';
+  coordinate_space?: 'grid1000' | 'pdf_points';
   signer_plan_json: string | Array<{ role: string }>;
 };
 
@@ -64,7 +70,13 @@ export async function POST(request: Request) {
         { error: 'Publishing templates requires the publish permission.' },
         { status: 403 },
       );
-    if (action === 'upload') {
+    if (action === 'create_pdf') {
+      details = await createPdfTemplate(form, actor.id);
+      event = 'TEMPLATE_CREATED';
+    } else if (action === 'duplicate') {
+      details = await duplicateTemplateVersion(formText(form, 'versionId'));
+      event = 'TEMPLATE_VERSION_CREATED';
+    } else if (action === 'upload') {
       details = await upload(form, actor.id);
       event = 'TEMPLATE_VERSION_UPLOADED';
     } else if (action === 'map') {
@@ -76,7 +88,10 @@ export async function POST(request: Request) {
       action === 'retire'
     ) {
       details = await changeLifecycle(form, action);
-      event = `TEMPLATE_VERSION_${action.toUpperCase()}`;
+      event =
+        action === 'activate'
+          ? 'TEMPLATE_PUBLISHED'
+          : `TEMPLATE_VERSION_${action.toUpperCase()}`;
     } else {
       return Response.json(
         { error: 'Unknown template action.' },
@@ -234,9 +249,10 @@ async function mapFields(form: FormData) {
       [versionId],
     );
     const version = rows[0];
-    if (!version || version.lifecycle !== 'draft')
-      throw new Error('Only draft versions can be mapped.');
-    const fields = parseFields(formText(form, 'fields'), version);
+    if (!version) throw new Error('Template version not found.');
+    assertDraftMutable(version.lifecycle);
+    const payload = parseFieldPayload(formText(form, 'fields'), version);
+    const fields = payload.fields;
     await connection.execute(
       'DELETE FROM template_fields WHERE template_version_id = ?',
       [versionId],
@@ -245,8 +261,8 @@ async function mapFields(form: FormData) {
       await connection.execute<ResultSetHeader>(
         `INSERT INTO template_fields
          (id, template_version_id, field_name, label, field_type, populated_by,
-          signer_role, page_number, x, y, width, height, required, display_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          signer_role, group_key, options_json, date_format, page_number, x, y, width, height, required, display_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           randomUUID(),
           versionId,
@@ -255,6 +271,9 @@ async function mapFields(form: FormData) {
           field.fieldType,
           toDbPopulatedBy(field.populatedBy),
           field.signerRole,
+          field.groupKey ?? null,
+          field.options?.length ? JSON.stringify(field.options) : null,
+          field.dateFormat ?? null,
           field.pageNumber,
           field.x,
           field.y,
@@ -265,6 +284,16 @@ async function mapFields(form: FormData) {
         ],
       );
     }
+    if (payload.signerPlan)
+      await connection.execute(
+        'UPDATE template_versions SET signer_plan_json = ?, coordinate_space = ? WHERE id = ?',
+        [JSON.stringify(payload.signerPlan), payload.space, versionId],
+      );
+    else if (payload.space === 'pdf_points')
+      await connection.execute(
+        "UPDATE template_versions SET coordinate_space = 'pdf_points' WHERE id = ?",
+        [versionId],
+      );
     await connection.commit();
     return { versionId, fieldCount: fields.length };
   } catch (error) {
@@ -387,22 +416,49 @@ async function changeLifecycle(form: FormData, action: string) {
   }
 }
 
-function parseFields(raw: string, version: VersionRow): TemplateField[] {
+const FIELD_TYPES = [
+  'text',
+  'multiline',
+  'date',
+  'checkbox',
+  'radio',
+  'dropdown',
+  'initials',
+  'signature',
+  'email',
+  'phone',
+];
+
+function parseFieldPayload(raw: string, version: VersionRow) {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
     throw new Error('Field mapping is invalid JSON.');
   }
-  if (!Array.isArray(parsed) || parsed.length > 300)
+  const body = Array.isArray(parsed)
+    ? {
+        coordinateSpace: version.coordinate_space ?? 'grid1000',
+        fields: parsed,
+      }
+    : (parsed as {
+        coordinateSpace?: 'grid1000' | 'pdf_points';
+        fields?: unknown;
+        signerPlan?: Array<{ role: string; order: number; required: boolean }>;
+      });
+  const list = body.fields;
+  if (!Array.isArray(list) || list.length > 300)
     throw new Error('Field mapping must contain at most 300 fields.');
-  const plan =
-    typeof version.signer_plan_json === 'string'
+  const space =
+    body.coordinateSpace === 'pdf_points' ? 'pdf_points' : 'grid1000';
+  const plan = body.signerPlan?.length
+    ? body.signerPlan
+    : typeof version.signer_plan_json === 'string'
       ? JSON.parse(version.signer_plan_json)
       : version.signer_plan_json;
   const roles = new Set(plan.map((item: { role: string }) => item.role));
   const names = new Set<string>();
-  return parsed.map((value: unknown) => {
+  const fields = list.map((value: unknown) => {
     const field = value as TemplateField;
     if (
       !field ||
@@ -415,9 +471,7 @@ function parseFields(raw: string, version: VersionRow): TemplateField[] {
       typeof field.label !== 'string' ||
       !field.label ||
       field.label.length > 255 ||
-      !['text', 'date', 'checkbox', 'radio', 'initials', 'signature'].includes(
-        field.fieldType,
-      ) ||
+      !FIELD_TYPES.includes(field.fieldType) ||
       !['admin-fill', 'participant-fill', 'signer', 'system'].includes(
         field.populatedBy,
       ) ||
@@ -426,30 +480,39 @@ function parseFields(raw: string, version: VersionRow): TemplateField[] {
       throw new Error(
         `Field ${field.fieldName} has invalid type, owner, or signer role.`,
       );
+    if (
+      (field.fieldType === 'dropdown' || field.fieldType === 'radio') &&
+      (!Array.isArray(field.options) || field.options.length < 1)
+    )
+      throw new Error(`Field ${field.fieldName} needs at least one choice.`);
     if (version.layout_strategy === 'pdf_overlay') {
+      const numbers = [field.x, field.y, field.width, field.height];
+      const points = space === 'pdf_points';
       if (
         !Number.isInteger(field.pageNumber) ||
         field.pageNumber! < 1 ||
         field.pageNumber! > version.page_count ||
-        ![field.x, field.y, field.width, field.height].every(
-          Number.isInteger,
+        numbers.some(
+          (value) => typeof value !== 'number' || Number.isNaN(value),
         ) ||
+        (!points && numbers.some((value) => !Number.isInteger(value))) ||
         field.x! < 0 ||
         field.y! < 0 ||
         field.width! < 1 ||
         field.height! < 1 ||
-        field.x! + field.width! > 1000 ||
-        field.y! + field.height! > 1000
+        (!points &&
+          (field.x! + field.width! > 1000 ||
+            field.y! + field.height! > 1000)) ||
+        (points && (field.x! > 5000 || field.y! > 5000 || field.width! > 2000))
       )
-        throw new Error(
-          `Field ${field.fieldName} needs a valid page and box in 0–1000 coordinates.`,
-        );
+        throw new Error(`Field ${field.fieldName} needs a valid page and box.`);
     } else {
       field.pageNumber = field.x = field.y = field.width = field.height = null;
     }
     field.required = Boolean(field.required);
     return field;
   });
+  return { fields, space, signerPlan: body.signerPlan };
 }
 
 function toDbPopulatedBy(owner: TemplateField['populatedBy']) {

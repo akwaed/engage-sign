@@ -157,8 +157,8 @@ export function SendDocumentForm({
       </Link>
       <h1 className="mt-4 text-3xl font-semibold">Send a document</h1>
       <p className="mt-2 text-sm text-stone-600">
-        Choose an active template, fill preparer fields, and assign each signer
-        role.
+        Choose a published template and enter each recipient. Field placement
+        stays on the template and cannot be changed for one person. role.
       </p>
       {message && (
         <output className="mt-5 block rounded border bg-amber-50 p-3 text-sm">
