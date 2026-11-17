@@ -4,9 +4,17 @@ import { randomUUID } from 'node:crypto';
 import type { RowDataPacket } from 'mysql2/promise';
 
 import { decryptValue } from '@/lib/encryption';
-import { buildFinalArchive, verifyFinalArchive, type ArchiveVersion } from '@/lib/final-archive';
+import {
+  buildFinalArchive,
+  verifyFinalArchive,
+  type ArchiveVersion,
+} from '@/lib/final-archive';
 import { getMysqlPool } from '@/lib/mysql';
-import { readPrivateObject, removePrivateObject, storePrivateObject } from '@/lib/private-storage';
+import {
+  readPrivateObject,
+  removePrivateObject,
+  storePrivateObject,
+} from '@/lib/private-storage';
 import { fromMysqlUtc } from '@/lib/signing-domain';
 import { sha256 } from '@/lib/template-files';
 
@@ -24,7 +32,9 @@ export async function finalizeCompletedEnvelope(envelopeId: string) {
     await connection.beginTransaction();
     const [envelopes] = await connection.query<
       Array<RowDataPacket & { status: string; completed_at: string | Date }>
-    >('SELECT status, completed_at FROM envelopes WHERE id = ? FOR UPDATE', [envelopeId]);
+    >('SELECT status, completed_at FROM envelopes WHERE id = ? FOR UPDATE', [
+      envelopeId,
+    ]);
     const envelope = envelopes[0];
     if (!envelope || envelope.status !== 'completed' || !envelope.completed_at)
       throw new Error('The document is not complete.');
@@ -46,12 +56,14 @@ export async function finalizeCompletedEnvelope(envelopeId: string) {
       return existing[0];
     }
     const [documents] = await connection.query<
-      Array<RowDataPacket & {
-        id: string;
-        version_kind: ArchiveVersion['kind'];
-        document_hash: string;
-        storage_key: string;
-      }>
+      Array<
+        RowDataPacket & {
+          id: string;
+          version_kind: ArchiveVersion['kind'];
+          document_hash: string;
+          storage_key: string;
+        }
+      >
     >(
       `SELECT id, version_kind, document_hash, storage_key FROM document_versions
        WHERE envelope_id = ? AND version_kind IN ('prepared', 'presented', 'intermediate', 'final')
@@ -71,15 +83,17 @@ export async function finalizeCompletedEnvelope(envelopeId: string) {
       });
     }
     const [events] = await connection.query<
-      Array<RowDataPacket & {
-        signer_id: string;
-        signer_role: string;
-        name_encrypted: string;
-        signed_at: string | Date;
-        signature_method: 'typed' | 'drawn';
-        consent_text_version: string;
-        presented_document_hash: string;
-      }>
+      Array<
+        RowDataPacket & {
+          signer_id: string;
+          signer_role: string;
+          name_encrypted: string;
+          signed_at: string | Date;
+          signature_method: 'typed' | 'drawn';
+          consent_text_version: string;
+          presented_document_hash: string;
+        }
+      >
     >(
       `SELECT se.signer_id, s.signer_role, s.name_encrypted, se.signed_at,
               se.signature_method, se.consent_text_version, se.presented_document_hash
@@ -93,7 +107,10 @@ export async function finalizeCompletedEnvelope(envelopeId: string) {
       versions,
       events: events.map((event) => ({
         signerId: event.signer_id,
-        name: decryptValue(event.name_encrypted, `signer:${event.signer_id}:name`),
+        name: decryptValue(
+          event.name_encrypted,
+          `signer:${event.signer_id}:name`,
+        ),
         role: event.signer_role,
         signedAt: fromMysqlUtc(event.signed_at).toISOString(),
         method: event.signature_method,
@@ -102,15 +119,22 @@ export async function finalizeCompletedEnvelope(envelopeId: string) {
       })),
     });
     const certificateKey = await storePrivateObject(
-      'documents', envelopeId, 'pdf', result.certificate,
+      'documents',
+      envelopeId,
+      'pdf',
+      result.certificate,
     );
     stored.push(certificateKey);
     const archiveKey = await storePrivateObject(
-      'documents', envelopeId, 'zip', result.archive,
+      'documents',
+      envelopeId,
+      'zip',
+      result.archive,
     );
     stored.push(archiveKey);
     if (
-      sha256(await readPrivateObject(certificateKey)) !== result.certificateHash ||
+      sha256(await readPrivateObject(certificateKey)) !==
+        result.certificateHash ||
       sha256(await readPrivateObject(archiveKey)) !== result.archiveHash
     )
       throw new Error('Final archive failed storage verification.');
@@ -119,7 +143,13 @@ export async function finalizeCompletedEnvelope(envelopeId: string) {
       `INSERT INTO document_versions
        (id, envelope_id, version_kind, source_hash, document_hash, storage_key, byte_length, created_at)
        VALUES (?, ?, 'audit_certificate', NULL, ?, ?, ?, UTC_TIMESTAMP(6))`,
-      [randomUUID(), envelopeId, result.certificateHash, certificateKey, result.certificate.length],
+      [
+        randomUUID(),
+        envelopeId,
+        result.certificateHash,
+        certificateKey,
+        result.certificate.length,
+      ],
     );
     await connection.execute(
       `INSERT INTO final_archives
@@ -127,8 +157,14 @@ export async function finalizeCompletedEnvelope(envelopeId: string) {
         archive_hash, storage_key, byte_length, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(6))`,
       [
-        randomUUID(), envelopeId, final.id, result.finalHash,
-        result.certificateHash, result.archiveHash, archiveKey, result.archive.length,
+        randomUUID(),
+        envelopeId,
+        final.id,
+        result.finalHash,
+        result.certificateHash,
+        result.archiveHash,
+        archiveKey,
+        result.archive.length,
       ],
     );
     await connection.commit();
@@ -152,7 +188,13 @@ export async function readVerifiedFinalArchive(envelopeId: string) {
   const record = await finalizeCompletedEnvelope(envelopeId);
   const bytes = await readPrivateObject(record.storage_key);
   if (sha256(bytes) !== record.archive_hash)
-    throw new Error('Final archive checksum does not match its database record.');
-  verifyFinalArchive(bytes, record.final_document_hash, record.certificate_hash);
+    throw new Error(
+      'Final archive checksum does not match its database record.',
+    );
+  verifyFinalArchive(
+    bytes,
+    record.final_document_hash,
+    record.certificate_hash,
+  );
   return { bytes, hash: record.archive_hash };
 }

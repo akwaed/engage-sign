@@ -52,8 +52,8 @@ export default async function SetupPage({
           <CardHeader>
             <CardTitle>Create the first administrator</CardTitle>
             <CardDescription>
-              This page closes permanently after the first user is created. It
-              requires the private SETUP_TOKEN from GoDaddy Secrets.
+              Create the first administrator. This page closes after the account
+              is created.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -115,17 +115,6 @@ export default async function SetupPage({
                     At least 14 characters. A password manager is recommended.
                   </p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="setupToken">One-time setup secret</Label>
-                  <Input
-                    id="setupToken"
-                    name="setupToken"
-                    type="password"
-                    autoComplete="off"
-                    required
-                    className="h-10"
-                  />
-                </div>
                 <Button
                   type="submit"
                   className="h-10 w-full bg-[#ed6435] hover:bg-[#d9552a]"
@@ -146,7 +135,6 @@ function first(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : (value ?? null);
 }
 function setupError(code: string | null) {
-  if (code === 'token') return 'The one-time setup secret was not accepted.';
   if (code === 'password') return 'Use a password with at least 14 characters.';
   if (code === 'exists')
     return 'An administrator already exists. Use the normal sign-in page.';

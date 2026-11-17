@@ -16,7 +16,14 @@ export type MailContent = {
 export function notificationKind(type: string): MailKind {
   if (/^reminder_\d{1,3}$/.test(type)) return 'reminder';
   if (
-    ['invite', 'next_signer', 'completion', 'expiration', 'decline', 'void'].includes(type)
+    [
+      'invite',
+      'next_signer',
+      'completion',
+      'expiration',
+      'decline',
+      'void',
+    ].includes(type)
   )
     return type as MailKind;
   throw new Error('Unknown notification type.');
@@ -60,7 +67,15 @@ export function renderMail(input: {
 }
 
 function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (character) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  })[character]!);
+  return value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      })[character]!,
+  );
 }

@@ -100,6 +100,7 @@ export function SigningForm({
           ? {
               presentedHash,
               consent,
+              consentVersion,
               method,
               typedName,
               drawnPng: method === 'drawn' ? drawnPng : undefined,
@@ -347,7 +348,7 @@ export function SigningForm({
                   onClick={() => void submit('submit')}
                   className="flex-1 rounded bg-[#ed6435] px-4 py-2 font-medium text-white disabled:opacity-50"
                 >
-                  Sign and submit
+                  Sign and Accept
                 </button>
               </div>
               <button

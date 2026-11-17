@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 export async function convertDocxToPdf(bytes: Uint8Array) {
   const executable = process.env.LIBREOFFICE_BIN?.trim() || 'soffice';
@@ -12,12 +13,13 @@ export async function convertDocxToPdf(bytes: Uint8Array) {
     const source = join(directory, 'input.docx');
     await writeFile(source, bytes);
     await new Promise<void>((resolve, reject) => {
+      const lock = process.env.CONVERSION_LOCK_PATH;
       const child = spawn(
-        executable,
+        lock ? '/usr/bin/flock' : executable,
         [
-          '-env:UserInstallation=file:///' +
-            directory.replace(/\\/g, '/') +
-            '/profile',
+          ...(lock ? ['--wait', '30', lock, executable] : []),
+          '-env:UserInstallation=' +
+            pathToFileURL(join(directory, 'profile')).href,
           '--headless',
           '--convert-to',
           'pdf:writer_pdf_Export',
@@ -25,9 +27,20 @@ export async function convertDocxToPdf(bytes: Uint8Array) {
           directory,
           source,
         ],
-        { shell: false, windowsHide: true, stdio: 'ignore' },
+        {
+          shell: false,
+          windowsHide: true,
+          stdio: 'ignore',
+          detached: process.platform === 'linux',
+        },
       );
-      const timer = setTimeout(() => child.kill(), 60_000);
+      const timer = setTimeout(() => {
+        if (process.platform === 'linux' && child.pid) {
+          try {
+            process.kill(-child.pid, 'SIGKILL');
+          } catch {}
+        } else child.kill();
+      }, 90_000);
       child.on('error', (error) => {
         clearTimeout(timer);
         reject(

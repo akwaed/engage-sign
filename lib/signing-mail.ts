@@ -10,7 +10,11 @@ import { decryptValue } from '@/lib/encryption';
 import { notificationKind, renderMail } from '@/lib/mail-templates';
 import { safeErrorCode, sanitizeProviderResponse } from '@/lib/mail-security';
 import { getMysqlPool } from '@/lib/mysql';
-import { createSigningToken, fromMysqlUtc, hashSigningToken } from '@/lib/signing-domain';
+import {
+  createSigningToken,
+  fromMysqlUtc,
+  hashSigningToken,
+} from '@/lib/signing-domain';
 
 type OutboxRow = RowDataPacket & {
   id: string;
@@ -25,7 +29,13 @@ type OutboxRow = RowDataPacket & {
 };
 
 export function assertMailConfigured() {
-  for (const name of ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_FROM', 'APP_URL'])
+  for (const name of [
+    'SMTP_HOST',
+    'SMTP_USER',
+    'SMTP_PASSWORD',
+    'SMTP_FROM',
+    'APP_URL',
+  ])
     if (!process.env[name])
       throw new Error(`${name} is required before sending documents.`);
   const origin = new URL(process.env.APP_URL!);
@@ -76,21 +86,29 @@ export async function enqueueEnvelopeStatus(
   envelopeId: string,
   type: 'completion' | 'expiration' | 'decline' | 'void',
 ) {
-  const [signers] = await connection.query<Array<RowDataPacket & { id: string }>>(
+  const [signers] = await connection.query<
+    Array<RowDataPacket & { id: string }>
+  >(
     'SELECT id FROM signers WHERE envelope_id = ? AND notified_at IS NOT NULL',
     [envelopeId],
   );
-  await enqueueNotifications(connection, signers.map((signer) => signer.id), type);
+  await enqueueNotifications(
+    connection,
+    signers.map((signer) => signer.id),
+    type,
+  );
 }
 
 export async function queueDueReminders(now = new Date()) {
   const [rows] = await getMysqlPool().query<
-    Array<RowDataPacket & {
-      signer_id: string;
-      expires_at: string;
-      notified_at: string | null;
-      reminder_schedule_json: string | number[];
-    }>
+    Array<
+      RowDataPacket & {
+        signer_id: string;
+        expires_at: string;
+        notified_at: string | null;
+        reminder_schedule_json: string | number[];
+      }
+    >
   >(
     `SELECT s.id AS signer_id, s.notified_at, e.expires_at, e.reminder_schedule_json
      FROM signers s JOIN envelopes e ON e.id = s.envelope_id
@@ -102,12 +120,15 @@ export async function queueDueReminders(now = new Date()) {
   try {
     await connection.beginTransaction();
     for (const row of rows) {
-      if (!row.notified_at ||
-          now.getTime() - fromMysqlUtc(row.notified_at).getTime() < 86_400_000)
+      if (
+        !row.notified_at ||
+        now.getTime() - fromMysqlUtc(row.notified_at).getTime() < 86_400_000
+      )
         continue;
-      const schedule = typeof row.reminder_schedule_json === 'string'
-        ? JSON.parse(row.reminder_schedule_json) as number[]
-        : row.reminder_schedule_json;
+      const schedule =
+        typeof row.reminder_schedule_json === 'string'
+          ? (JSON.parse(row.reminder_schedule_json) as number[])
+          : row.reminder_schedule_json;
       if (!Array.isArray(schedule)) continue;
       const daysRemaining =
         (fromMysqlUtc(row.expires_at).getTime() - now.getTime()) / 86_400_000;
@@ -142,8 +163,10 @@ export async function dispatchNotifications(limit = 10) {
       const row = await claimNotification();
       if (!row) break;
       const kind = notificationKind(row.notification_type);
-      const token = kind === 'invite' || kind === 'next_signer'
-        ? createSigningToken() : null;
+      const token =
+        kind === 'invite' || kind === 'next_signer'
+          ? createSigningToken()
+          : null;
       try {
         if (token)
           await getMysqlPool().execute(
@@ -153,7 +176,10 @@ export async function dispatchNotifications(limit = 10) {
           );
         const content = renderMail({
           kind,
-          name: decryptValue(row.name_encrypted, `signer:${row.signer_id}:name`),
+          name: decryptValue(
+            row.name_encrypted,
+            `signer:${row.signer_id}:name`,
+          ),
           title: row.title,
           expiresAt: fromMysqlUtc(row.expires_at),
           signingUrl: token ? `${origin}/s/${token}` : undefined,
@@ -161,10 +187,18 @@ export async function dispatchNotifications(limit = 10) {
         const response = await transporter.sendMail({
           from: process.env.SMTP_FROM,
           replyTo: process.env.SMTP_REPLY_TO || undefined,
-          to: decryptValue(row.email_encrypted, `signer:${row.signer_id}:email`),
+          to: decryptValue(
+            row.email_encrypted,
+            `signer:${row.signer_id}:email`,
+          ),
           ...content,
         });
-        await recordDelivery(row, true, sanitizeProviderResponse(response.response), null);
+        await recordDelivery(
+          row,
+          true,
+          sanitizeProviderResponse(response.response),
+          null,
+        );
         results.push({ id: row.id, sent: true });
       } catch (error) {
         await recordDelivery(row, false, null, safeErrorCode(error));
@@ -205,8 +239,13 @@ export async function probeSmtpTcp() {
     socket.once('connect', () => finish('connected'));
     socket.once('error', (error) => {
       const code = 'code' in error ? String(error.code) : '';
-      finish(/^(ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|ETIMEDOUT|EACCES|EPERM)$/.test(code)
-        ? `failed:${code}` : 'failed');
+      finish(
+        /^(ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|ETIMEDOUT|EACCES|EPERM)$/.test(
+          code,
+        )
+          ? `failed:${code}`
+          : 'failed',
+      );
     });
   });
 }
@@ -287,7 +326,10 @@ async function recordDelivery(
   try {
     await connection.beginTransaction();
     if (sent) {
-      if (row.notification_type === 'invite' || row.notification_type === 'next_signer')
+      if (
+        row.notification_type === 'invite' ||
+        row.notification_type === 'next_signer'
+      )
         await connection.execute(
           `UPDATE signers SET status = 'sent', notified_at = UTC_TIMESTAMP(6)
            WHERE id = ? AND status IN ('pending', 'sent')`,

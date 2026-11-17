@@ -21,35 +21,62 @@ export async function POST(request: Request) {
   }
   const actor = await getStaffUser();
   if (!actor || actor.role !== 'admin')
-    return Response.json({ error: 'Administrator access is required.' }, { status: 403 });
+    return Response.json(
+      { error: 'Administrator access is required.' },
+      { status: 403 },
+    );
   try {
-    const body = (await request.json()) as { action?: string; envelopeId?: string };
+    const body = (await request.json()) as {
+      action?: string;
+      envelopeId?: string;
+    };
     if (body.action === 'verify') {
       try {
         console.info('SMTP_VERIFY_START');
         await verifyMailConnection();
         console.info('SMTP_VERIFY_OK');
-        return Response.json({ ok: true, message: 'SMTP connection and authentication succeeded.' });
+        return Response.json({
+          ok: true,
+          message: 'SMTP connection and authentication succeeded.',
+        });
       } catch (error) {
         const code = safeErrorCode(error);
-        const status = error && typeof error === 'object' && 'responseCode' in error
-          ? Number(error.responseCode) : null;
-        const stage = error && typeof error === 'object' && 'command' in error &&
+        const status =
+          error && typeof error === 'object' && 'responseCode' in error
+            ? Number(error.responseCode)
+            : null;
+        const stage =
+          error &&
+          typeof error === 'object' &&
+          'command' in error &&
           /^(CONN|EHLO|STARTTLS|AUTH)$/.test(String(error.command))
-          ? String(error.command) : 'unknown';
+            ? String(error.command)
+            : 'unknown';
         const tcp = await probeSmtpTcp().catch(() => 'failed');
-        console.warn(`SMTP_VERIFY_FAILED code=${code} status=${Number.isInteger(status) ? status : 'none'} stage=${stage} tcp=${tcp}`);
-        return Response.json({
-          error: `SMTP verification failed (${code}${Number.isInteger(status) ? `, status ${status}` : ''}; stage ${stage}; TCP ${tcp}).`,
-        }, { status: 424 });
+        console.warn(
+          `SMTP_VERIFY_FAILED code=${code} status=${Number.isInteger(status) ? status : 'none'} stage=${stage} tcp=${tcp}`,
+        );
+        return Response.json(
+          {
+            error: `SMTP verification failed (${code}${Number.isInteger(status) ? `, status ${status}` : ''}; stage ${stage}; TCP ${tcp}).`,
+          },
+          { status: 424 },
+        );
       }
     }
     if (body.action === 'retry') {
       if (!/^[a-f0-9-]{36}$/i.test(body.envelopeId ?? ''))
-        return Response.json({ error: 'Invalid document ID.' }, { status: 400 });
+        return Response.json(
+          { error: 'Invalid document ID.' },
+          { status: 400 },
+        );
       const reset = await resetFailedNotifications(body.envelopeId!);
       const results = await dispatchNotifications();
-      return Response.json({ ok: true, reset, sent: results.filter((item) => item.sent).length });
+      return Response.json({
+        ok: true,
+        reset,
+        sent: results.filter((item) => item.sent).length,
+      });
     }
     if (body.action === 'run') {
       const expired = await expireDueEnvelopes();
@@ -65,8 +92,10 @@ export async function POST(request: Request) {
     }
     return Response.json({ error: 'Unknown mail action.' }, { status: 400 });
   } catch (error) {
-    const message = error instanceof Error && /required|HTTPS|SMTP_PORT/.test(error.message)
-      ? error.message : 'Mail operation failed. See delivery records.';
+    const message =
+      error instanceof Error && /required|HTTPS|SMTP_PORT/.test(error.message)
+        ? error.message
+        : 'Mail operation failed. See delivery records.';
     return Response.json({ error: message }, { status: 500 });
   }
 }

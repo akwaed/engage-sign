@@ -31,14 +31,17 @@ export type FinalArchiveInput = {
 };
 
 export async function buildFinalArchive(input: FinalArchiveInput) {
-  if (!input.events.length) throw new Error('A final archive needs signer evidence.');
+  if (!input.events.length)
+    throw new Error('A final archive needs signer evidence.');
   const final = input.versions.find((version) => version.kind === 'final');
   if (!final) throw new Error('A final PDF is required.');
   for (const version of input.versions) {
     if (!/^[a-zA-Z0-9-]{1,64}$/.test(version.id))
       throw new Error('A document version ID is invalid.');
     if (sha256(version.bytes) !== version.hash)
-      throw new Error(`Document version ${version.id} failed SHA-256 verification.`);
+      throw new Error(
+        `Document version ${version.id} failed SHA-256 verification.`,
+      );
     if (String.fromCharCode(...version.bytes.subarray(0, 5)) !== '%PDF-')
       throw new Error(`Document version ${version.id} is not a PDF.`);
   }
@@ -79,7 +82,10 @@ export async function buildFinalArchive(input: FinalArchiveInput) {
     .map(([name, bytes]) => `${sha256(bytes)}  ${name}`)
     .join('\n');
   entries['checksums.sha256'] = strToU8(checksums + '\n');
-  const archive = zipSync(entries, { level: 6, mtime: new Date(input.completedAt) });
+  const archive = zipSync(entries, {
+    level: 6,
+    mtime: new Date(input.completedAt),
+  });
   verifyFinalArchive(archive, final.hash, certificateHash);
   return {
     archive,
@@ -96,19 +102,28 @@ export function verifyFinalArchive(
   expectedCertificateHash: string,
 ) {
   const entries = unzipSync(archive);
-  if (!entries['final.pdf'] || !entries['audit-certificate.pdf'] ||
-      !entries['manifest.json'] || !entries['checksums.sha256'])
+  if (
+    !entries['final.pdf'] ||
+    !entries['audit-certificate.pdf'] ||
+    !entries['manifest.json'] ||
+    !entries['checksums.sha256']
+  )
     throw new Error('Final archive contains missing files.');
   const listed = strFromU8(entries['checksums.sha256'])
     .trimEnd()
     .split('\n')
     .map((line) => line.match(/^([a-f0-9]{64})  ([\w./-]+)$/));
-  if (listed.some((match) => !match) || listed.length !== Object.keys(entries).length - 1)
+  if (
+    listed.some((match) => !match) ||
+    listed.length !== Object.keys(entries).length - 1
+  )
     throw new Error('Final archive checksum list is invalid.');
   if (
     new Set(listed.map((match) => match![2])).size !== listed.length ||
-    listed.some((match) => match![2] === 'checksums.sha256' ||
-      !Object.hasOwn(entries, match![2]))
+    listed.some(
+      (match) =>
+        match![2] === 'checksums.sha256' || !Object.hasOwn(entries, match![2]),
+    )
   )
     throw new Error('Final archive checksum list has unexpected entries.');
   for (const match of listed) {
@@ -133,13 +148,19 @@ export function verifyFinalArchive(
     throw new Error('Final archive manifest does not match its record.');
   if (manifest.documentVersions.length !== Object.keys(entries).length - 3)
     throw new Error('Final archive version manifest is incomplete.');
-  if (new Set(manifest.documentVersions.map((version) => version.archivePath)).size !==
-      manifest.documentVersions.length)
+  if (
+    new Set(manifest.documentVersions.map((version) => version.archivePath))
+      .size !== manifest.documentVersions.length
+  )
     throw new Error('Final archive version paths are duplicated.');
   for (const version of manifest.documentVersions)
-    if (!entries[version.archivePath] ||
-        sha256(entries[version.archivePath]) !== version.sha256)
-      throw new Error('Final archive version hash does not match its manifest.');
+    if (
+      !entries[version.archivePath] ||
+      sha256(entries[version.archivePath]) !== version.sha256
+    )
+      throw new Error(
+        'Final archive version hash does not match its manifest.',
+      );
 }
 
 async function buildCertificate(input: FinalArchiveInput) {
@@ -159,10 +180,17 @@ async function buildCertificate(input: FinalArchiveInput) {
         y = 740;
       }
       let end = remaining.length;
-      while (end > 1 && face.widthOfTextAtSize(remaining.slice(0, end), size) > 516)
+      while (
+        end > 1 &&
+        face.widthOfTextAtSize(remaining.slice(0, end), size) > 516
+      )
         end--;
       page.drawText(remaining.slice(0, end), {
-        x: 48, y, size, font: face, color: rgb(0.16, 0.13, 0.17),
+        x: 48,
+        y,
+        size,
+        font: face,
+        color: rgb(0.16, 0.13, 0.17),
       });
       y -= heading ? 28 : 17;
       remaining = remaining.slice(end);
@@ -183,7 +211,9 @@ async function buildCertificate(input: FinalArchiveInput) {
     line('Presented PDF SHA-256:');
     line(event.presentedHash);
   }
-  line('The final PDF and this certificate have separate checksums in the archive manifest.');
+  line(
+    'The final PDF and this certificate have separate checksums in the archive manifest.',
+  );
   return document.save();
 }
 

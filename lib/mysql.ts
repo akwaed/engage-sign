@@ -18,7 +18,7 @@ export function getMysqlPool(): Pool {
 
   if (!databaseUrl && (!host || !database || !user || !password)) {
     throw new Error(
-      'MySQL is not configured. GoDaddy should inject DB_HOST, DB_PORT, DB_NAME, DB_USER, and DB_PASSWORD.',
+      'MySQL is not configured. Set DB_HOST, DB_PORT, DB_NAME, DB_USER, and DB_PASSWORD in the service environment.',
     );
   }
 

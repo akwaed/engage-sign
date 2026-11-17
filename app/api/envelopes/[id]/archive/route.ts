@@ -16,7 +16,10 @@ export async function POST(
   }
   const actor = await getStaffUser();
   if (!actor || actor.role !== 'admin')
-    return Response.json({ error: 'Administrator access is required.' }, { status: 403 });
+    return Response.json(
+      { error: 'Administrator access is required.' },
+      { status: 403 },
+    );
   const { id } = await context.params;
   if (!/^[a-f0-9-]{36}$/i.test(id))
     return Response.json({ error: 'Invalid document ID.' }, { status: 400 });
@@ -33,7 +36,10 @@ export async function POST(
     });
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : 'Final archive unavailable.' },
+      {
+        error:
+          error instanceof Error ? error.message : 'Final archive unavailable.',
+      },
       { status: 409 },
     );
   }

@@ -27,9 +27,9 @@ import {
   type TemplateField,
 } from '@/lib/template-files';
 
-export const CONSENT_VERSION = '2026-09-draft-1';
+export const CONSENT_VERSION = '2026-09-30-1';
 export const CONSENT_TEXT =
-  'I agree to use an electronic signature for this document. I have reviewed the document shown above, and I intend my signature to be legally binding.';
+  'This is a legally binding document. By clicking “Sign and Accept”, you agree that you have the authority to enter into the agreement and are creating your electronic signature and signing the document just as if you had used a pen to ink sign the document.';
 
 type FieldRow = RowDataPacket & {
   id: string;
@@ -61,6 +61,7 @@ type EventRow = RowDataPacket & { submission_hash: string };
 export type SigningInput = {
   presentedHash: string;
   consent: true;
+  consentVersion: string;
   method: 'typed' | 'drawn';
   typedName?: string;
   drawnPng?: string;
@@ -75,6 +76,8 @@ export function validateSigningInput(raw: unknown): SigningInput {
     throw new Error('The presented document hash is invalid.');
   if (input.consent !== true)
     throw new Error('Electronic-signature consent is required.');
+  if (input.consentVersion !== CONSENT_VERSION)
+    throw new Error('Signing terms changed. Refresh and review them again.');
   if (input.method !== 'typed' && input.method !== 'drawn')
     throw new Error('Choose a signature method.');
   if (

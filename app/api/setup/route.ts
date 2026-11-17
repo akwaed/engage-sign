@@ -1,4 +1,4 @@
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
 import { appendAuditEvent } from '@/lib/audit';
@@ -24,13 +24,9 @@ export async function POST(request: Request) {
   const displayName = formText(form, 'displayName').trim().slice(0, 160);
   const email = formText(form, 'email').trim().toLowerCase().slice(0, 320);
   const password = formText(form, 'password');
-  const suppliedToken = formText(form, 'setupToken');
-  const expectedToken = process.env.SETUP_TOKEN ?? '';
   if (!displayName || !email.includes('@'))
     return redirectError(request, 'invalid');
   if (validatePassword(password)) return redirectError(request, 'password');
-  if (!expectedToken || !safeEqual(suppliedToken, expectedToken))
-    return redirectError(request, 'token');
 
   const pool = getMysqlPool();
   const connection = await pool.getConnection();
@@ -73,11 +69,6 @@ export async function POST(request: Request) {
   return redirectToLocalPath(request, '/login?setup=complete');
 }
 
-function safeEqual(left: string, right: string) {
-  const a = createHash('sha256').update(left).digest();
-  const b = createHash('sha256').update(right).digest();
-  return timingSafeEqual(a, b);
-}
 function redirectError(request: Request, error: string) {
   return redirectToLocalPath(
     request,

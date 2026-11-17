@@ -81,9 +81,18 @@ export async function GET(
       presentedId,
     );
     await connection.commit();
-    const response = NextResponse.redirect(
-      new URL(`/sign/${signer.envelope_id}`, getPublicOrigin(request)),
-      303,
+    const signingPath = `/sign/${encodeURIComponent(signer.envelope_id)}`;
+    const response = new NextResponse(
+      `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="0;url=${signingPath}"><title>Opening document</title></head><body><p>Opening your document… <a href="${signingPath}">Continue to signing</a></p></body></html>`,
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'private, no-store',
+          'Referrer-Policy': 'no-referrer',
+          'Content-Security-Policy': "default-src 'none'; base-uri 'none'; form-action 'none'",
+        },
+      },
     );
     response.cookies.set(
       recipientCookie(

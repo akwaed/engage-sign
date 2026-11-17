@@ -48,7 +48,9 @@ export function DocumentActions({
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Archive is unavailable.');
+      setMessage(
+        error instanceof Error ? error.message : 'Archive is unavailable.',
+      );
     } finally {
       setBusy(false);
     }
