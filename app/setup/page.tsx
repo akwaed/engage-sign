@@ -32,7 +32,20 @@ export default async function SetupPage({
   } catch {
     configured = false;
   }
-  if (configured && userCount > 0) redirect('/login');
+  let setupCompleted = false;
+  if (configured) {
+    try {
+      const [settings] = await getMysqlPool().query<
+        Array<RowDataPacket & { setup_completed: number }>
+      >('SELECT setup_completed FROM system_settings WHERE id = ? LIMIT 1', [
+        'global',
+      ]);
+      setupCompleted = Number(settings[0]?.setup_completed ?? 0) === 1;
+    } catch {
+      configured = false;
+    }
+  }
+  if (configured && (userCount > 0 || setupCompleted)) redirect('/login');
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#f7f5f2] px-5 py-12">
@@ -52,8 +65,8 @@ export default async function SetupPage({
           <CardHeader>
             <CardTitle>Create the first administrator</CardTitle>
             <CardDescription>
-              Create the first administrator. This page closes after the account
-              is created.
+              Requires the server SETUP_TOKEN. This page closes permanently
+              after the first administrator exists.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -64,9 +77,9 @@ export default async function SetupPage({
                   Database setup is required
                 </div>
                 <p className="mt-2 leading-6">
-                  Create the hosted MySQL database, import{' '}
-                  <code>database/mysql/schema.sql</code>, and add its connection
-                  values as GoDaddy secrets. Then reload this page.
+                  Import the MySQL schema, apply the migrations, and set the
+                  database connection in the server environment. Then reload
+                  this page.
                 </p>
               </div>
             ) : (
@@ -115,6 +128,17 @@ export default async function SetupPage({
                     At least 14 characters. A password manager is recommended.
                   </p>
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="setupToken">Setup token</Label>
+                  <Input
+                    id="setupToken"
+                    name="setupToken"
+                    type="password"
+                    autoComplete="off"
+                    required
+                    className="h-10"
+                  />
+                </div>
                 <Button
                   type="submit"
                   className="h-10 w-full bg-[#ed6435] hover:bg-[#d9552a]"
@@ -140,5 +164,9 @@ function setupError(code: string | null) {
     return 'An administrator already exists. Use the normal sign-in page.';
   if (code === 'request')
     return 'The setup request could not be verified. Please try again.';
+  if (code === 'token') return 'The setup token was not accepted.';
+  if (code === 'limited') return 'Too many setup attempts. Try again later.';
+  if (code === 'closed')
+    return 'Administrator setup is closed. Sign in instead.';
   return 'Administrator setup could not be completed.';
 }

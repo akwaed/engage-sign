@@ -1,5 +1,6 @@
 import type { RowDataPacket } from 'mysql2/promise';
 
+import { canEditTemplates } from '@/lib/auth/rbac';
 import { getStaffUser } from '@/lib/auth/session';
 import { convertDocxToPdf } from '@/lib/docx-convert';
 import { getMysqlPool } from '@/lib/mysql';
@@ -40,7 +41,7 @@ export async function GET(
   context: { params: Promise<{ versionId: string }> },
 ) {
   const actor = await getStaffUser();
-  if (!actor || actor.role !== 'admin')
+  if (!actor || !canEditTemplates(actor))
     return new Response('Forbidden', { status: 403 });
   try {
     const { versionId } = await context.params;
@@ -73,7 +74,7 @@ export async function POST(
     return new Response('Invalid origin', { status: 403 });
   }
   const actor = await getStaffUser();
-  if (!actor || actor.role !== 'admin')
+  if (!actor || !canEditTemplates(actor))
     return new Response('Forbidden', { status: 403 });
   try {
     const { versionId } = await context.params;

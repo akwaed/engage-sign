@@ -3,6 +3,7 @@ import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
 import { appendAuditEvent } from '@/lib/audit';
 import { baselinePdfFields } from '@/lib/baseline-pdf-fields';
+import { canEditTemplates, canPublishTemplates } from '@/lib/auth/rbac';
 import { getStaffUser } from '@/lib/auth/session';
 import { formText } from '@/lib/form-data';
 import { getMysqlPool } from '@/lib/mysql';
@@ -44,9 +45,9 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Invalid request origin.' }, { status: 403 });
   }
   const actor = await getStaffUser();
-  if (!actor || actor.role !== 'admin')
+  if (!actor || !canEditTemplates(actor))
     return Response.json(
-      { error: 'Administrator access is required.' },
+      { error: 'You do not have access to templates.' },
       { status: 403 },
     );
 
@@ -55,6 +56,14 @@ export async function POST(request: Request) {
     const action = formText(form, 'action');
     let event = '';
     let details: Record<string, unknown> = {};
+    if (
+      (action === 'activate' || action === 'rollback' || action === 'retire') &&
+      !canPublishTemplates(actor)
+    )
+      return Response.json(
+        { error: 'Publishing templates requires the publish permission.' },
+        { status: 403 },
+      );
     if (action === 'upload') {
       details = await upload(form, actor.id);
       event = 'TEMPLATE_VERSION_UPLOADED';

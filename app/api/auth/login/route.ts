@@ -2,6 +2,9 @@ import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
 import { appendAuditEvent } from '@/lib/audit';
 import { hashPassword, verifyPassword } from '@/lib/auth/password';
+import { consumeRateLimit } from '@/lib/auth/rate-limit';
+import { RATE_LIMITS } from '@/lib/auth/rate-limit-policy';
+import type { Role } from '@/lib/auth/rbac';
 import {
   createStaffSession,
   safeReturnTo,
@@ -17,14 +20,17 @@ import {
   hashClientIp,
 } from '@/lib/request-security';
 
-type UserRow = RowDataPacket &
-  StaffUser & {
-    display_name: string;
-    password_hash: string;
-    status: 'active' | 'disabled';
-    failed_login_count: number;
-    locked_until: string | null;
-  };
+type UserRow = RowDataPacket & {
+  id: string;
+  email: string;
+  display_name: string;
+  role: Role;
+  can_publish: number;
+  password_hash: string;
+  status: 'active' | 'disabled';
+  failed_login_count: number;
+  locked_until: string | null;
+};
 
 export async function POST(request: Request) {
   try {
@@ -36,8 +42,11 @@ export async function POST(request: Request) {
   const email = formText(form, 'email').trim().toLowerCase().slice(0, 320);
   const password = formText(form, 'password');
   const returnTo = safeReturnTo(formText(form, 'returnTo'));
+  const ip = getClientIp(request) ?? 'unknown';
+  if (!(await consumeRateLimit({ ...RATE_LIMITS.loginIp, value: ip })))
+    return errorRedirect(request, 'limited', returnTo);
   const [rows] = await getMysqlPool().query<UserRow[]>(
-    `SELECT id, email, display_name, role, password_hash, status, failed_login_count, locked_until
+    `SELECT id, email, display_name, role, can_publish, password_hash, status, failed_login_count, locked_until
        FROM users WHERE email = ? LIMIT 1`,
     [email],
   );
@@ -62,6 +71,15 @@ export async function POST(request: Request) {
         [failures >= 5 ? 0 : failures, failures, row.id],
       );
     }
+    if (row)
+      await appendAuditEvent({
+        actorType: 'user',
+        actorId: row.id,
+        eventType: 'STAFF_LOGIN_FAILED',
+        details: {},
+        ipHash: hashClientIp(getClientIp(request)),
+        userAgent: request.headers.get('user-agent'),
+      }).catch(() => undefined);
     return errorRedirect(
       request,
       row && Number(row.failed_login_count) + 1 >= 5 ? 'locked' : 'invalid',
@@ -74,6 +92,7 @@ export async function POST(request: Request) {
     email: row.email,
     displayName: row.display_name,
     role: row.role,
+    canPublish: Number(row.can_publish) === 1,
   };
   await getMysqlPool().execute<ResultSetHeader>(
     'UPDATE users SET failed_login_count = 0, locked_until = NULL, updated_at = UTC_TIMESTAMP(6) WHERE id = ?',

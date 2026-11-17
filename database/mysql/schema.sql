@@ -5,7 +5,8 @@ CREATE TABLE users (
   id CHAR(36) PRIMARY KEY,
   email VARCHAR(320) NOT NULL,
   display_name VARCHAR(160) NOT NULL,
-  role ENUM('admin', 'staff') NOT NULL,
+  role ENUM('admin', 'staff', 'template_manager', 'standard_user') NOT NULL,
+  can_publish TINYINT(1) NOT NULL DEFAULT 0,
   status ENUM('active', 'disabled') NOT NULL DEFAULT 'active',
   password_hash VARCHAR(255) NOT NULL,
   failed_login_count INT UNSIGNED NOT NULL DEFAULT 0,
@@ -182,7 +183,8 @@ CREATE TABLE signer_sessions (
 
 CREATE TABLE notification_outbox (
   id CHAR(36) PRIMARY KEY,
-  signer_id CHAR(36) NOT NULL,
+  signer_id CHAR(36) NULL,
+  user_id CHAR(36) NULL,
   notification_type VARCHAR(40) NOT NULL,
   status ENUM('pending', 'sending', 'sent', 'failed') NOT NULL DEFAULT 'pending',
   attempts INT UNSIGNED NOT NULL DEFAULT 0,
@@ -196,7 +198,22 @@ CREATE TABLE notification_outbox (
   UNIQUE KEY notification_outbox_once (signer_id, notification_type),
   KEY notification_outbox_status_idx (status, created_at),
   KEY notification_outbox_retry_idx (status, next_attempt_at),
-  CONSTRAINT notification_outbox_signer_fk FOREIGN KEY (signer_id) REFERENCES signers(id) ON DELETE CASCADE
+  CONSTRAINT notification_outbox_signer_fk FOREIGN KEY (signer_id) REFERENCES signers(id) ON DELETE CASCADE,
+  CONSTRAINT notification_outbox_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE auth_rate_limits (
+  bucket VARCHAR(64) NOT NULL,
+  subject_hash CHAR(64) NOT NULL,
+  window_start DATETIME(6) NOT NULL,
+  attempts INT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (bucket, subject_hash, window_start)
+) ENGINE=InnoDB;
+
+CREATE TABLE schema_migrations (
+  version VARCHAR(191) NOT NULL,
+  applied_at DATETIME(6) NOT NULL,
+  PRIMARY KEY (version)
 ) ENGINE=InnoDB;
 
 CREATE TABLE final_archives (
@@ -270,6 +287,7 @@ CREATE TABLE system_settings (
   retention_days INT UNSIGNED NULL,
   updated_by CHAR(36) NULL,
   updated_at DATETIME(6) NOT NULL,
+  setup_completed TINYINT(1) NOT NULL DEFAULT 0,
   CONSTRAINT system_settings_updated_by_fk FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 

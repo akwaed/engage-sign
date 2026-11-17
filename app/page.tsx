@@ -36,6 +36,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  canEditTemplates,
+  canManageUsers,
+  canReadAllDocuments,
+  canSendDocuments,
+} from '@/lib/auth/rbac';
 import { requireStaffUser } from '@/lib/auth/session';
 import { getMysqlPool } from '@/lib/mysql';
 import { expireDueEnvelopes } from '@/lib/envelope-expiration';
@@ -61,13 +67,17 @@ const navigation = [
 export default async function Home() {
   const user = await requireStaffUser('/');
   await expireDueEnvelopes();
+  const seeAll = canReadAllDocuments(user) ? 1 : 0;
+  const scope = [seeAll, user.id];
   const [[documents], [counts], [activeTemplates]] = await Promise.all([
     getMysqlPool().query<DocumentRow[]>(
       `SELECT e.id, e.title, e.status, e.expires_at,
               COUNT(s.id) AS signer_count,
               SUM(CASE WHEN s.status = 'signed' THEN 1 ELSE 0 END) AS signed_count
        FROM envelopes e LEFT JOIN signers s ON s.envelope_id = e.id
+       WHERE (? = 1 OR e.created_by = ?)
        GROUP BY e.id ORDER BY e.created_at DESC LIMIT 20`,
+      scope,
     ),
     getMysqlPool().query<
       Array<
@@ -83,7 +93,9 @@ export default async function Home() {
        SUM(CASE WHEN status = 'completed' AND completed_at >= DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-01') THEN 1 ELSE 0 END) AS completed,
        SUM(CASE WHEN status IN ('sent','viewed','partially_signed')
          AND expires_at <= DATE_ADD(UTC_TIMESTAMP(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS expiring
-       FROM envelopes`,
+       FROM envelopes
+       WHERE (? = 1 OR created_by = ?)`,
+      scope,
     ),
     getMysqlPool().query<Array<RowDataPacket & { total: number }>>(
       "SELECT COUNT(*) AS total FROM template_versions WHERE lifecycle = 'active'",
@@ -118,9 +130,11 @@ export default async function Home() {
               <Link
                 key={item.label}
                 href={
-                  item.label === 'Templates' && user.role !== 'admin'
+                  item.label === 'Templates' && !canEditTemplates(user)
                     ? '/#templates'
-                    : item.href
+                    : item.label === 'Templates'
+                      ? '/admin/templates'
+                      : item.href
                 }
                 className={`flex h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors ${
                   item.active
@@ -146,7 +160,7 @@ export default async function Home() {
                 <span>Email delivery</span>
               </Link>
             ) : null}
-            {user.role === 'admin' ? (
+            {canManageUsers(user) ? (
               <Link
                 href="/admin/users"
                 className="flex h-10 items-center gap-3 rounded-lg px-3 text-sm text-white/62 transition-colors hover:bg-white/7 hover:text-white"
@@ -228,7 +242,7 @@ export default async function Home() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {user.role === 'admin' ? <LegalExportButton /> : null}
-                {user.role === 'admin' ? (
+                {canSendDocuments(user) ? (
                   <Link
                     href="/admin/send"
                     className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#ed6435] px-3 text-sm font-medium text-white hover:bg-[#d9552a]"
@@ -294,16 +308,12 @@ export default async function Home() {
                     {documents.map((document) => (
                       <TableRow key={document.id} className="h-[68px]">
                         <TableCell className="pl-5 font-medium text-[#2c2028] sm:pl-6">
-                          {user.role === 'admin' ? (
-                            <Link
-                              href={`/admin/documents/${document.id}`}
-                              className="underline"
-                            >
-                              {document.title}
-                            </Link>
-                          ) : (
-                            document.title
-                          )}
+                          <Link
+                            href={`/admin/documents/${document.id}`}
+                            className="underline"
+                          >
+                            {document.title}
+                          </Link>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {document.signer_count} signer(s)

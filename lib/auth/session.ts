@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
 import { toMysqlDate } from '@/lib/audit';
+import { normalizeRole, type Role } from '@/lib/auth/rbac';
 import { getMysqlPool } from '@/lib/mysql';
 
 export const SESSION_COOKIE = 'engage_sign_session';
@@ -15,7 +16,8 @@ export type StaffUser = {
   id: string;
   email: string;
   displayName: string;
-  role: 'admin' | 'staff';
+  role: Role;
+  canPublish: boolean;
 };
 
 export async function createStaffSession(input: {
@@ -51,11 +53,12 @@ export async function getStaffUser(): Promise<StaffUser | null> {
         id: string;
         email: string;
         display_name: string;
-        role: 'admin' | 'staff';
+        role: Role;
+        can_publish: number;
       }
     >
   >(
-    `SELECT s.id AS session_id, u.id, u.email, u.display_name, u.role
+    `SELECT s.id AS session_id, u.id, u.email, u.display_name, u.role, u.can_publish
        FROM staff_sessions s
        JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = ?
@@ -66,7 +69,8 @@ export async function getStaffUser(): Promise<StaffUser | null> {
     [tokenHash(token)],
   );
   const row = rows[0];
-  if (!row) return null;
+  const role = row ? normalizeRole(row.role) : null;
+  if (!row || !role) return null;
 
   void getMysqlPool()
     .execute(
@@ -78,8 +82,16 @@ export async function getStaffUser(): Promise<StaffUser | null> {
     id: row.id,
     email: row.email,
     displayName: row.display_name,
-    role: row.role,
+    role,
+    canPublish: Number(row.can_publish) === 1,
   };
+}
+
+export async function revokeUserSessions(userId: string) {
+  await getMysqlPool().execute<ResultSetHeader>(
+    'UPDATE staff_sessions SET revoked_at = UTC_TIMESTAMP(6) WHERE user_id = ? AND revoked_at IS NULL',
+    [userId],
+  );
 }
 
 export async function requireStaffUser(returnTo = '/'): Promise<StaffUser> {
@@ -97,6 +109,15 @@ export async function requireStaffUser(returnTo = '/'): Promise<StaffUser> {
 export async function requireAdmin(returnTo = '/admin/users') {
   const user = await requireStaffUser(returnTo);
   if (user.role !== 'admin') redirect('/?error=forbidden');
+  return user;
+}
+
+export async function requireUser(
+  returnTo: string,
+  allowed: (user: StaffUser) => boolean,
+) {
+  const user = await requireStaffUser(returnTo);
+  if (!allowed(user)) redirect('/?error=forbidden');
   return user;
 }
 

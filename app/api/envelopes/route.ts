@@ -1,4 +1,5 @@
 import { appendAuditEvent } from '@/lib/audit';
+import { canReadAllDocuments, canSendDocuments } from '@/lib/auth/rbac';
 import { getStaffUser } from '@/lib/auth/session';
 import { saveDraft, sendDraft, validateEnvelopeInput } from '@/lib/envelopes';
 import {
@@ -18,9 +19,9 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Invalid request origin.' }, { status: 403 });
   }
   const actor = await getStaffUser();
-  if (!actor || actor.role !== 'admin')
+  if (!actor || !canSendDocuments(actor))
     return Response.json(
-      { error: 'Administrator access is required.' },
+      { error: 'You do not have access to send documents.' },
       { status: 403 },
     );
   let id: string | null = null;
@@ -30,7 +31,12 @@ export async function POST(request: Request) {
       sendNow?: boolean;
     };
     const input = validateEnvelopeInput(body.input);
-    id = await saveDraft(input, actor.id);
+    id = await saveDraft(
+      input,
+      actor.id,
+      undefined,
+      canReadAllDocuments(actor),
+    );
     await appendAuditEvent({
       actorType: 'user',
       actorId: actor.id,
@@ -41,7 +47,7 @@ export async function POST(request: Request) {
       userAgent: request.headers.get('user-agent'),
     });
     if (!body.sendNow) return Response.json({ ok: true, id, status: 'draft' });
-    const sent = await sendDraft(id, actor.id);
+    const sent = await sendDraft(id, actor.id, canReadAllDocuments(actor));
     const notifications = await dispatchInvitations().catch(() => []);
     await appendAuditEvent({
       actorType: 'user',

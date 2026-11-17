@@ -2,6 +2,8 @@ import 'server-only';
 
 import { createHmac } from 'node:crypto';
 
+import { selectClientIp, trustedProxyHops } from '@/lib/client-ip';
+
 export function assertSameOrigin(request: Request) {
   const origin = request.headers.get('origin');
   if (!origin || normalizeOrigin(origin) !== getPublicOrigin(request)) {
@@ -31,8 +33,15 @@ export function getPublicOrigin(request: Request) {
 }
 
 export function getClientIp(request: Request): string | null {
-  const forwarded = request.headers.get('x-forwarded-for');
-  return forwarded?.split(',')[0]?.trim() || request.headers.get('x-real-ip');
+  const withSocket = request as Request & {
+    socket?: { remoteAddress?: string | null };
+  };
+  return selectClientIp({
+    forwardedFor: request.headers.get('x-forwarded-for'),
+    realIp: request.headers.get('x-real-ip'),
+    socketAddress: withSocket.socket?.remoteAddress,
+    trustedHops: trustedProxyHops(),
+  });
 }
 
 export function hashClientIp(ipAddress: string | null): string | null {

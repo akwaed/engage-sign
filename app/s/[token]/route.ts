@@ -90,7 +90,8 @@ export async function GET(
           'Content-Type': 'text/html; charset=utf-8',
           'Cache-Control': 'private, no-store',
           'Referrer-Policy': 'no-referrer',
-          'Content-Security-Policy': "default-src 'none'; base-uri 'none'; form-action 'none'",
+          'Content-Security-Policy':
+            "default-src 'none'; base-uri 'none'; form-action 'none'",
         },
       },
     );

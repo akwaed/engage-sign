@@ -3,6 +3,9 @@ import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
 import { appendAuditEvent } from '@/lib/audit';
 import { hashPassword, validatePassword } from '@/lib/auth/password';
+import { consumeRateLimit } from '@/lib/auth/rate-limit';
+import { RATE_LIMITS } from '@/lib/auth/rate-limit-policy';
+import { setupAllowed } from '@/lib/auth/setup-policy';
 import { formText } from '@/lib/form-data';
 import { redirectToLocalPath } from '@/lib/http-response';
 import { getMysqlPool } from '@/lib/mysql';
@@ -20,10 +23,14 @@ export async function POST(request: Request) {
   } catch {
     return redirectError(request, 'request');
   }
+  const ip = getClientIp(request) ?? 'unknown';
+  if (!(await consumeRateLimit({ ...RATE_LIMITS.setupIp, value: ip })))
+    return redirectError(request, 'limited');
   const form = await request.formData();
   const displayName = formText(form, 'displayName').trim().slice(0, 160);
   const email = formText(form, 'email').trim().toLowerCase().slice(0, 320);
   const password = formText(form, 'password');
+  const suppliedToken = formText(form, 'setupToken');
   if (!displayName || !email.includes('@'))
     return redirectError(request, 'invalid');
   if (validatePassword(password)) return redirectError(request, 'password');
@@ -40,17 +47,39 @@ export async function POST(request: Request) {
     const [existing] = await connection.query<
       Array<RowDataPacket & { total: number }>
     >('SELECT COUNT(*) AS total FROM users');
-    if (Number(existing[0]?.total ?? 0) > 0)
-      return redirectError(request, 'exists');
+    const [settings] = await connection.query<
+      Array<RowDataPacket & { setup_completed: number }>
+    >('SELECT setup_completed FROM system_settings WHERE id = ? LIMIT 1', [
+      'global',
+    ]);
+    const decision = setupAllowed({
+      setupCompleted: Number(settings[0]?.setup_completed ?? 0) === 1,
+      userCount: Number(existing[0]?.total ?? 0),
+      suppliedToken,
+      expectedToken: process.env.SETUP_TOKEN ?? '',
+    });
+    if (decision !== 'ok') return redirectError(request, decision);
     userId = randomUUID();
     const passwordHash = await hashPassword(password);
+    await connection.beginTransaction();
     await connection.execute<ResultSetHeader>(
       `INSERT INTO users
         (id, email, display_name, role, status, password_hash, failed_login_count,
-         locked_until, password_changed_at, created_at, updated_at)
-       VALUES (?, ?, ?, 'admin', 'active', ?, 0, NULL, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))`,
+         locked_until, password_changed_at, can_publish, created_at, updated_at)
+       VALUES (?, ?, ?, 'admin', 'active', ?, 0, NULL, UTC_TIMESTAMP(6), 0, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))`,
       [userId, email, displayName, passwordHash],
     );
+    await connection.execute<ResultSetHeader>(
+      `INSERT INTO system_settings
+        (id, default_expiration_days, reminder_schedule_json, retention_days,
+         updated_by, updated_at, setup_completed)
+       VALUES ('global', 14, JSON_ARRAY(7, 3, 1), NULL, NULL, UTC_TIMESTAMP(6), 1)
+       ON DUPLICATE KEY UPDATE setup_completed = 1, updated_at = UTC_TIMESTAMP(6)`,
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback().catch(() => undefined);
+    throw error;
   } finally {
     try {
       await connection.query("SELECT RELEASE_LOCK('engage-sign-first-admin')");
@@ -62,7 +91,7 @@ export async function POST(request: Request) {
     actorType: 'user',
     actorId: userId,
     eventType: 'FIRST_ADMIN_CREATED',
-    details: { email },
+    details: {},
     ipHash: hashClientIp(getClientIp(request)),
     userAgent: request.headers.get('user-agent'),
   });
