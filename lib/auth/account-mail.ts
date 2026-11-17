@@ -6,8 +6,10 @@ import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { appendAuditEventInTransaction, toMysqlDate } from '@/lib/audit';
 import { hashResetToken, resetExpiry } from '@/lib/auth/reset-token';
 import { createResetToken } from '@/lib/auth/reset-token';
+import { writeOutgoingMail } from '@/lib/mail-file';
 import { renderAccountMail } from '@/lib/mail-templates';
 import { safeErrorCode } from '@/lib/mail-security';
+import { fileMailAppOrigin, resolveMailTransport } from '@/lib/mail-transport';
 import { getMysqlPool } from '@/lib/mysql';
 import { assertMailConfigured, sendConfiguredMail } from '@/lib/signing-mail';
 
@@ -34,8 +36,11 @@ export async function enqueueAccountMail(
 }
 
 export async function dispatchAccountNotifications(limit = 10) {
-  if (process.env.MAIL_ENABLED !== 'true') return [];
-  const origin = assertMailConfigured();
+  const transport = resolveMailTransport();
+  if (transport.mode === 'smtp' && process.env.MAIL_ENABLED !== 'true')
+    return [];
+  const origin =
+    transport.mode === 'file' ? fileMailAppOrigin() : assertMailConfigured();
   const results: Array<{ id: string; sent: boolean }> = [];
   for (let index = 0; index < limit; index += 1) {
     const row = await claimAccountNotification();
@@ -55,7 +60,14 @@ export async function dispatchAccountNotifications(limit = 10) {
         url: `${origin}/reset?token=${encodeURIComponent(token)}`,
         expiresAt,
       });
-      const provider = await sendConfiguredMail({ to: row.email, ...content });
+      const provider =
+        transport.mode === 'file'
+          ? await writeOutgoingMail(transport.directory, {
+              to: row.email,
+              from: process.env.SMTP_FROM,
+              ...content,
+            })
+          : await sendConfiguredMail({ to: row.email, ...content });
       await getMysqlPool().execute<ResultSetHeader>(
         `UPDATE password_reset_tokens
             SET used_at = UTC_TIMESTAMP(6)

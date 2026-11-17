@@ -7,7 +7,9 @@ import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
 
 import { appendAuditEventInTransaction } from '@/lib/audit';
 import { decryptValue } from '@/lib/encryption';
+import { writeOutgoingMail } from '@/lib/mail-file';
 import { notificationKind, renderMail } from '@/lib/mail-templates';
+import { fileMailAppOrigin, resolveMailTransport } from '@/lib/mail-transport';
 import { safeErrorCode, sanitizeProviderResponse } from '@/lib/mail-security';
 import { getMysqlPool } from '@/lib/mysql';
 import {
@@ -155,6 +157,51 @@ export async function queueDueReminders(now = new Date()) {
 }
 
 export async function dispatchNotifications(limit = 10) {
+  const transport = resolveMailTransport();
+  if (transport.mode === 'file')
+    return dispatchNotificationsToFile(limit, transport.directory);
+  return dispatchNotificationsBySmtp(limit);
+}
+
+async function dispatchNotificationsToFile(limit: number, directory: string) {
+  const origin = fileMailAppOrigin();
+  const results: Array<{ id: string; sent: boolean }> = [];
+  for (let index = 0; index < limit; index++) {
+    const row = await claimNotification();
+    if (!row) break;
+    const kind = notificationKind(row.notification_type);
+    const token =
+      kind === 'invite' || kind === 'next_signer' ? createSigningToken() : null;
+    try {
+      if (token)
+        await getMysqlPool().execute(
+          `UPDATE signers SET token_hash = ?, token_expires_at = ?
+           WHERE id = ? AND status IN ('pending', 'sent')`,
+          [hashSigningToken(token), row.expires_at, row.signer_id],
+        );
+      const content = renderMail({
+        kind,
+        name: decryptValue(row.name_encrypted, `signer:${row.signer_id}:name`),
+        title: row.title,
+        expiresAt: fromMysqlUtc(row.expires_at),
+        signingUrl: token ? `${origin}/s/${token}` : undefined,
+      });
+      const receipt = await writeOutgoingMail(directory, {
+        to: decryptValue(row.email_encrypted, `signer:${row.signer_id}:email`),
+        from: process.env.SMTP_FROM,
+        ...content,
+      });
+      await recordDelivery(row, true, receipt, null);
+      results.push({ id: row.id, sent: true });
+    } catch (error) {
+      await recordDelivery(row, false, null, safeErrorCode(error));
+      results.push({ id: row.id, sent: false });
+    }
+  }
+  return results;
+}
+
+async function dispatchNotificationsBySmtp(limit: number) {
   const origin = assertMailConfigured();
   const transporter = createTransport();
   const results: Array<{ id: string; sent: boolean }> = [];
@@ -212,6 +259,7 @@ export async function dispatchNotifications(limit = 10) {
 }
 
 export async function verifyMailConnection() {
+  if (resolveMailTransport().mode === 'file') return true;
   assertMailConfigured();
   const transporter = createTransport(true);
   try {
@@ -256,6 +304,14 @@ export async function sendConfiguredMail(message: {
   text: string;
   html: string;
 }) {
+  const transport = resolveMailTransport();
+  if (transport.mode === 'file') {
+    fileMailAppOrigin();
+    return writeOutgoingMail(transport.directory, {
+      ...message,
+      from: process.env.SMTP_FROM,
+    });
+  }
   assertMailConfigured();
   const transporter = createTransport();
   try {
