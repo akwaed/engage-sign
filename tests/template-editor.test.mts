@@ -54,10 +54,7 @@ void test('PDF points round-trip on a later page', () => {
 });
 
 void test('upload validation rejects non-PDFs and flattens a multi-page PDF', async () => {
-  assert.throws(
-    () => assertPdfUpload(new Uint8Array(64).fill(1)),
-    /not a PDF/,
-  );
+  assert.throws(() => assertPdfUpload(new Uint8Array(64).fill(1)), /not a PDF/);
   const source = await PDFDocument.create();
   source.addPage([612, 792]);
   source.addPage([612, 792]);
