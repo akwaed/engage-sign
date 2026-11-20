@@ -6,6 +6,8 @@ import { redirect } from 'next/navigation';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
 import { toMysqlDate } from '@/lib/audit';
+import { idleMinutes, sessionIdleExpired } from '@/lib/session-policy';
+import { fromMysqlUtc } from '@/lib/signing-domain';
 import { normalizeRole, type Role } from '@/lib/auth/rbac';
 import { getMysqlPool } from '@/lib/mysql';
 
@@ -50,6 +52,7 @@ export async function getStaffUser(): Promise<StaffUser | null> {
     Array<
       RowDataPacket & {
         session_id: string;
+        last_seen_at: string | Date;
         id: string;
         email: string;
         display_name: string;
@@ -58,7 +61,7 @@ export async function getStaffUser(): Promise<StaffUser | null> {
       }
     >
   >(
-    `SELECT s.id AS session_id, u.id, u.email, u.display_name, u.role, u.can_publish
+    `SELECT s.id AS session_id, s.last_seen_at, u.id, u.email, u.display_name, u.role, u.can_publish
        FROM staff_sessions s
        JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = ?
@@ -71,6 +74,19 @@ export async function getStaffUser(): Promise<StaffUser | null> {
   const row = rows[0];
   const role = row ? normalizeRole(row.role) : null;
   if (!row || !role) return null;
+  if (
+    sessionIdleExpired({
+      lastSeenAt: fromMysqlUtc(row.last_seen_at),
+      now: new Date(),
+      idleMinutes: idleMinutes(),
+    })
+  ) {
+    await getMysqlPool().execute(
+      'UPDATE staff_sessions SET revoked_at = UTC_TIMESTAMP(6) WHERE id = ? AND revoked_at IS NULL',
+      [row.session_id],
+    );
+    return null;
+  }
 
   void getMysqlPool()
     .execute(

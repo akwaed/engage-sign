@@ -1,6 +1,12 @@
 import 'server-only';
 
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+
+import {
+  auditKey,
+  canonicalAuditPayload,
+  hashAuditPayload,
+} from '@/lib/audit-chain';
 import type {
   PoolConnection,
   ResultSetHeader,
@@ -50,27 +56,26 @@ export async function appendAuditEventInTransaction(
     ...input.details,
     ...(input.ipHash ? { ipHash: input.ipHash } : {}),
   });
-  const eventHash = createHash('sha256')
-    .update(
-      JSON.stringify({
-        id,
-        envelopeId: input.envelopeId ?? null,
-        actorType: input.actorType,
-        actorId: input.actorId ?? null,
-        eventType: input.eventType,
-        detailsJson,
-        userAgent: input.userAgent ?? null,
-        occurredAt,
-        previousHash,
-      }),
-    )
-    .digest('hex');
+  const canonicalPayload = canonicalAuditPayload({
+    id,
+    envelopeId: input.envelopeId ?? null,
+    actorType: input.actorType,
+    actorId: input.actorId ?? null,
+    eventType: input.eventType,
+    detailsJson,
+    userAgent: input.userAgent ?? null,
+    occurredAt,
+    previousHash,
+  });
+  const hashAlg = auditKey() ? 'hmac-sha256' : 'sha256';
+  const eventHash = hashAuditPayload(canonicalPayload, hashAlg);
 
   await connection.execute<ResultSetHeader>(
     `INSERT INTO audit_events
         (id, envelope_id, actor_type, actor_id, event_type, details_json,
-         ip_address_encrypted, user_agent, occurred_at, previous_hash, event_hash)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
+         ip_address_encrypted, user_agent, occurred_at, previous_hash, event_hash,
+         hash_alg, canonical_payload)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       input.envelopeId ?? null,
@@ -82,6 +87,8 @@ export async function appendAuditEventInTransaction(
       toMysqlDate(occurredAt),
       previousHash,
       eventHash,
+      hashAlg,
+      canonicalPayload,
     ],
   );
   return { id, occurredAt, eventHash, previousHash };

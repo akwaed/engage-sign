@@ -15,6 +15,7 @@
     "jobs": "node --conditions=react-server --import tsx scripts/vps/jobs.ts",
     "seed:templates": "node --conditions=react-server --import tsx scripts/vps/seed-templates.ts",
     "seed:tb": "node --conditions=react-server --import tsx scripts/vps/seed-tb-template.ts",
+    "encrypt:files": "node --import tsx scripts/vps/encrypt-private-files.ts",
     "admin:password-hash": "node --conditions=react-server --import tsx scripts/vps/password-hash.ts"
   },
   "dependencies": {

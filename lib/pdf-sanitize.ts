@@ -28,6 +28,9 @@ export async function sanitizeTemplatePdf(bytes: Uint8Array) {
   const pages = await clean.copyPages(source, source.getPageIndices());
   for (const page of pages) clean.addPage(page);
   const saved = await clean.save();
+  const rebuilt = Buffer.from(saved).toString('latin1');
+  if (rebuilt.includes('/JavaScript') || rebuilt.includes('/EmbeddedFile'))
+    throw new Error('The PDF still contains active content after sanitizing.');
   return {
     bytes: saved,
     pageCount,

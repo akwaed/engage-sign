@@ -269,10 +269,12 @@ CREATE TABLE audit_events (
   occurred_at DATETIME(6) NOT NULL,
   previous_hash CHAR(64) NULL,
   event_hash CHAR(64) NOT NULL,
+  hash_alg VARCHAR(20) NOT NULL DEFAULT 'sha256',
+  canonical_payload TEXT NULL,
   UNIQUE KEY audit_events_hash_unique (event_hash),
   KEY audit_events_envelope_idx (envelope_id),
   KEY audit_events_time_idx (occurred_at),
-  CONSTRAINT audit_events_envelope_fk FOREIGN KEY (envelope_id) REFERENCES envelopes(id) ON DELETE CASCADE
+  CONSTRAINT audit_events_envelope_fk FOREIGN KEY (envelope_id) REFERENCES envelopes(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
 CREATE TABLE legal_exports (
@@ -292,6 +294,7 @@ CREATE TABLE system_settings (
   default_expiration_days INT UNSIGNED NOT NULL DEFAULT 14,
   reminder_schedule_json JSON NOT NULL,
   retention_days INT UNSIGNED NULL,
+  retention_purge_enabled TINYINT(1) NOT NULL DEFAULT 0,
   updated_by CHAR(36) NULL,
   updated_at DATETIME(6) NOT NULL,
   setup_completed TINYINT(1) NOT NULL DEFAULT 0,
@@ -317,8 +320,9 @@ CREATE TRIGGER audit_events_guard_delete
 BEFORE DELETE ON audit_events
 FOR EACH ROW
 BEGIN
-  IF COALESCE(@engage_retention_purge, 0) <> 1 THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Audit events may only be deleted by the retention purge job';
+  IF COALESCE(@engage_retention_purge, 0) <> 1
+     OR COALESCE((SELECT retention_purge_enabled FROM system_settings WHERE id = 'global'), 0) <> 1 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Audit events are append-only and are not deleted automatically';
   END IF;
 END$$
 

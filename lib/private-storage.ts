@@ -1,6 +1,8 @@
 import 'server-only';
 
 import { randomUUID } from 'node:crypto';
+
+import { decryptFileIfNeeded, encryptFile } from '@/lib/file-encryption';
 import { mkdir, open, readFile, realpath, unlink } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
 
@@ -62,9 +64,13 @@ export async function storePrivateObject(
     throw new Error('Private storage root cannot be a symlink.');
   const directory = resolve(root, kind, ownerId);
   await mkdir(directory, { recursive: true, mode: 0o700 });
+  const stored =
+    (kind === 'templates' || kind === 'documents') && extension === 'pdf'
+      ? encryptFile(bytes, key)
+      : bytes;
   const handle = await open(path, 'wx', 0o600);
   try {
-    await handle.writeFile(bytes);
+    await handle.writeFile(stored);
   } finally {
     await handle.close();
   }
@@ -84,7 +90,7 @@ export async function readPrivateObject(key: string) {
   const inside = relative(root, actualPath);
   if (!inside || inside.startsWith('..') || isAbsolute(inside))
     throw new Error('Private storage path escapes its root.');
-  return new Uint8Array(await readFile(actualPath));
+  return decryptFileIfNeeded(new Uint8Array(await readFile(actualPath)), key);
 }
 
 export async function removeTemplateVersion(key: string) {

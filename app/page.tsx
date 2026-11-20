@@ -160,6 +160,15 @@ export default async function Home() {
                 <span>Email delivery</span>
               </Link>
             ) : null}
+            {user.role === 'admin' ? (
+              <Link
+                href="/admin/settings"
+                className="flex h-10 items-center gap-3 rounded-lg px-3 text-sm text-white/62 transition-colors hover:bg-white/7 hover:text-white"
+              >
+                <ShieldCheckIcon className="size-4" />
+                <span>Retention</span>
+              </Link>
+            ) : null}
             {canManageUsers(user) ? (
               <Link
                 href="/admin/users"
