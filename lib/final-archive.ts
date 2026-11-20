@@ -21,6 +21,9 @@ export type ArchiveSignerEvent = {
   method: 'typed' | 'drawn';
   consentVersion: string;
   presentedHash: string;
+  verificationMethod?: string;
+  ipAddress?: string;
+  userAgent?: string;
 };
 
 export type FinalArchiveInput = {
@@ -28,6 +31,8 @@ export type FinalArchiveInput = {
   completedAt: string;
   versions: ArchiveVersion[];
   events: ArchiveSignerEvent[];
+  templateVersionId?: string;
+  templateSourceHash?: string;
 };
 
 export async function buildFinalArchive(input: FinalArchiveInput) {
@@ -199,6 +204,10 @@ async function buildCertificate(input: FinalArchiveInput) {
   line('Engage Sign - electronic signature certificate', true);
   line(`Envelope: ${input.envelopeId}`);
   line(`Completed (UTC): ${input.completedAt}`);
+  if (input.templateVersionId)
+    line(`Template version: ${input.templateVersionId}`);
+  if (input.templateSourceHash)
+    line(`Template source SHA-256: ${input.templateSourceHash}`);
   line('Document versions and SHA-256 hashes', true);
   for (const version of input.versions) {
     line(`${version.kind} | ${version.id}`);
@@ -206,8 +215,12 @@ async function buildCertificate(input: FinalArchiveInput) {
   }
   line('Signer events', true);
   for (const event of input.events) {
-    line(`${event.name} | ${event.role} | ${event.method}`);
+    line(
+      `${event.name} | ${event.role} | ${event.method} | ${event.verificationMethod ?? 'email_link'}`,
+    );
     line(`Signed (UTC): ${event.signedAt} | Consent: ${event.consentVersion}`);
+    line(`IP: ${event.ipAddress ?? 'unavailable'}`);
+    line(`User agent: ${event.userAgent ?? 'unavailable'}`);
     line('Presented PDF SHA-256:');
     line(event.presentedHash);
   }

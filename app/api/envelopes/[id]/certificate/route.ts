@@ -1,4 +1,4 @@
-import { completedFile } from '@/app/api/envelopes/[id]/pdf/route';
+import { completedFile } from '@/lib/completed-file';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

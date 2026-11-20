@@ -25,6 +25,11 @@ type ArchiveRow = RowDataPacket & {
   storage_key: string;
 };
 
+function readEvidence(value: string, context: string) {
+  if (!value.startsWith('v1.')) return value;
+  return decryptValue(value, context);
+}
+
 export async function finalizeCompletedEnvelope(envelopeId: string) {
   const connection = await getMysqlPool().getConnection();
   const stored: string[] = [];
@@ -85,25 +90,40 @@ export async function finalizeCompletedEnvelope(envelopeId: string) {
     const [events] = await connection.query<
       Array<
         RowDataPacket & {
+          id: string;
           signer_id: string;
           signer_role: string;
           name_encrypted: string;
           signed_at: string | Date;
           signature_method: 'typed' | 'drawn';
+          verification_method: string;
           consent_text_version: string;
           presented_document_hash: string;
+          ip_address_encrypted: string;
+          user_agent: string;
         }
       >
     >(
-      `SELECT se.signer_id, s.signer_role, s.name_encrypted, se.signed_at,
-              se.signature_method, se.consent_text_version, se.presented_document_hash
+      `SELECT se.id, se.signer_id, s.signer_role, s.name_encrypted, se.signed_at,
+              se.signature_method, se.verification_method, se.consent_text_version,
+              se.presented_document_hash, se.ip_address_encrypted, se.user_agent
        FROM signature_events se JOIN signers s ON s.id = se.signer_id
        WHERE se.envelope_id = ? ORDER BY se.signed_at, se.id`,
+      [envelopeId],
+    );
+    const [templates] = await connection.query<
+      Array<RowDataPacket & { id: string; source_hash: string }>
+    >(
+      `SELECT v.id, v.source_hash
+         FROM envelopes e JOIN template_versions v ON v.id = e.template_version_id
+        WHERE e.id = ? LIMIT 1`,
       [envelopeId],
     );
     const result = await buildFinalArchive({
       envelopeId,
       completedAt: fromMysqlUtc(envelope.completed_at).toISOString(),
+      templateVersionId: templates[0]?.id,
+      templateSourceHash: templates[0]?.source_hash,
       versions,
       events: events.map((event) => ({
         signerId: event.signer_id,
@@ -114,6 +134,12 @@ export async function finalizeCompletedEnvelope(envelopeId: string) {
         role: event.signer_role,
         signedAt: fromMysqlUtc(event.signed_at).toISOString(),
         method: event.signature_method,
+        verificationMethod: event.verification_method,
+        ipAddress: readEvidence(
+          event.ip_address_encrypted,
+          `signature:${event.id}:ip`,
+        ),
+        userAgent: readEvidence(event.user_agent, `signature:${event.id}:ua`),
         consentVersion: event.consent_text_version,
         presentedHash: event.presented_document_hash,
       })),
