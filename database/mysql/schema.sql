@@ -242,6 +242,7 @@ CREATE TABLE signature_events (
   envelope_id CHAR(36) NOT NULL,
   signer_id CHAR(36) NOT NULL,
   signature_method ENUM('typed', 'drawn') NOT NULL,
+  verification_method VARCHAR(40) NOT NULL DEFAULT 'email_link',
   signature_storage_key VARCHAR(1024) NOT NULL,
   presented_document_hash CHAR(64) NOT NULL,
   ip_address_encrypted LONGTEXT NOT NULL,

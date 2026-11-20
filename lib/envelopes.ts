@@ -73,6 +73,9 @@ type FieldRow = RowDataPacket & {
   width: number | null;
   height: number | null;
   required: number;
+  group_key?: string | null;
+  date_format?: string | null;
+  options_json?: string | string[] | null;
 };
 type EnvelopeRow = RowDataPacket & {
   id: string;
@@ -491,12 +494,25 @@ export function toTemplateField(row: FieldRow): TemplateField {
           : row.populated_by,
     signerRole: row.signer_role,
     pageNumber: row.page_number,
-    x: row.x,
-    y: row.y,
-    width: row.width,
-    height: row.height,
+    x: row.x === null || row.x === undefined ? null : Number(row.x),
+    y: row.y === null || row.y === undefined ? null : Number(row.y),
+    width:
+      row.width === null || row.width === undefined ? null : Number(row.width),
+    height:
+      row.height === null || row.height === undefined
+        ? null
+        : Number(row.height),
     required: Boolean(row.required),
+    groupKey: row.group_key ?? null,
+    dateFormat: row.date_format ?? null,
+    options: parseFieldOptions(row.options_json),
   };
+}
+
+function parseFieldOptions(value: FieldRow['options_json']) {
+  if (!value) return undefined;
+  const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+  return Array.isArray(parsed) ? parsed.map(String) : undefined;
 }
 
 export function toSignerState(row: SignerRow): SignerState {

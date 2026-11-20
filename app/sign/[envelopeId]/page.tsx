@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 import type { RowDataPacket } from 'mysql2/promise';
 
 import { SigningForm } from '@/components/signing-form';
+import { TbSigningWizard } from '@/components/tb-signing-wizard';
+import { TB_TEMPLATE_SLUG } from '@/lib/tb-form';
 import { decryptValue } from '@/lib/encryption';
 import { getMysqlPool } from '@/lib/mysql';
 import { getRecipientSession } from '@/lib/recipient-session';
@@ -12,9 +14,11 @@ export const dynamic = 'force-dynamic';
 type Field = RowDataPacket & {
   field_name: string;
   label: string;
-  field_type: 'text' | 'date' | 'checkbox' | 'radio' | 'initials' | 'signature';
+  field_type: string;
   required: number;
+  group_key: string | null;
 };
+type TemplateRow = RowDataPacket & { slug: string };
 
 export default async function SigningPage({
   params,
@@ -25,8 +29,16 @@ export default async function SigningPage({
   const session = await getRecipientSession();
   if (!session || session.envelope_id !== envelopeId)
     redirect('/sign/unavailable');
+  const [templates] = await getMysqlPool().query<TemplateRow[]>(
+    `SELECT t.slug
+       FROM envelopes e
+       JOIN template_versions v ON v.id = e.template_version_id
+       JOIN templates t ON t.id = v.template_id
+      WHERE e.id = ? LIMIT 1`,
+    [envelopeId],
+  );
   const [fields] = await getMysqlPool().query<Field[]>(
-    `SELECT f.field_name, f.label, f.field_type, f.required
+    `SELECT f.field_name, f.label, f.field_type, f.required, f.group_key
      FROM template_fields f JOIN envelopes e ON e.template_version_id = f.template_version_id
      WHERE e.id = ? AND f.signer_role = ? AND f.populated_by IN ('participant', 'signer')
      ORDER BY f.display_order`,
@@ -36,6 +48,25 @@ export default async function SigningPage({
     session.name_encrypted,
     `signer:${session.signer_id}:name`,
   );
+  const mapped = fields.map((field) => ({
+    name: field.field_name,
+    label: field.label,
+    type: field.field_type,
+    required: Boolean(field.required),
+    group: field.group_key ?? '',
+  }));
+  if (templates[0]?.slug === TB_TEMPLATE_SLUG) {
+    return (
+      <TbSigningWizard
+        title={session.title}
+        signerName={name}
+        presentedHash={session.presented_document_hash}
+        fields={mapped}
+        consentText={CONSENT_TEXT}
+        consentVersion={CONSENT_VERSION}
+      />
+    );
+  }
   return (
     <SigningForm
       title={session.title}
