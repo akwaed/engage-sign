@@ -90,8 +90,12 @@ export async function fillPdf(
   const document = await PDFDocument.load(bytes);
   const font = await document.embedFont(StandardFonts.Helvetica);
   for (const field of fields) {
-    const value = values[field.fieldName];
-    if (value === undefined || !value) continue;
+    const raw = values[field.fieldName];
+    if (raw === undefined || !raw) continue;
+    const value =
+      field.fieldType === 'date'
+        ? formatTemplateDate(raw, field.dateFormat)
+        : raw;
     if (
       !field.pageNumber ||
       field.x === null ||
@@ -127,6 +131,18 @@ export async function fillPdf(
         });
       continue;
     }
+    if (field.fieldType === 'signature') {
+      const size = Math.min(16, Math.max(8, placed.boxHeight * 0.45));
+      page.drawText(value.slice(0, 200), {
+        x: placed.x,
+        y: placed.y + 2,
+        size,
+        font,
+        color: rgb(0, 0, 0),
+        maxWidth: placed.boxWidth,
+      });
+      continue;
+    }
     const display = value.slice(0, 2000);
     const size = Math.min(11, Math.max(5, placed.boxHeight * 0.45));
     drawWrapped(
@@ -142,6 +158,12 @@ export async function fillPdf(
     );
   }
   return document.save();
+}
+
+function formatTemplateDate(value: string, dateFormat?: string | null) {
+  if (dateFormat !== 'MM/DD/YYYY') return value;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return match ? `${match[2]}/${match[3]}/${match[1]}` : value;
 }
 
 function drawWrapped(
@@ -187,6 +209,7 @@ export async function drawSignatureImages(
   bytes: Uint8Array,
   fields: TemplateField[],
   png: Uint8Array,
+  coordinateSpace: 'grid1000' | 'pdf_points' = 'grid1000',
 ) {
   const document = await PDFDocument.load(bytes);
   const image = await document.embedPng(png);
@@ -201,12 +224,27 @@ export async function drawSignatureImages(
       continue;
     const page = document.getPage(field.pageNumber - 1);
     const { width, height } = page.getSize();
-    const boxWidth = (field.width / 1000) * width;
-    const boxHeight = (field.height / 1000) * height;
-    const scale = Math.min(boxWidth / image.width, boxHeight / image.height);
+    const box =
+      coordinateSpace === 'pdf_points'
+        ? {
+            x: field.x,
+            y: height - field.y - field.height,
+            boxWidth: field.width,
+            boxHeight: field.height,
+          }
+        : {
+            x: (field.x / 1000) * width,
+            y: height - ((field.y + field.height) / 1000) * height,
+            boxWidth: (field.width / 1000) * width,
+            boxHeight: (field.height / 1000) * height,
+          };
+    const scale = Math.min(
+      box.boxWidth / image.width,
+      box.boxHeight / image.height,
+    );
     page.drawImage(image, {
-      x: (field.x / 1000) * width,
-      y: height - ((field.y + field.height) / 1000) * height,
+      x: box.x,
+      y: box.y,
       width: image.width * scale,
       height: image.height * scale,
     });

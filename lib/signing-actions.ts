@@ -444,6 +444,9 @@ export async function submitSignature(
           pdf,
           assigned.map(toTemplateField),
           png,
+          template.coordinate_space === 'pdf_points'
+            ? 'pdf_points'
+            : 'grid1000',
         );
     }
     const signedAt = new Date().toISOString();
@@ -502,10 +505,10 @@ export async function submitSignature(
     );
     await connection.execute(
       `INSERT INTO signature_events
-       (id, envelope_id, signer_id, signature_method, signature_storage_key,
-        presented_document_hash, ip_address_encrypted, user_agent,
-        consent_text_version, submission_hash, signed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, envelope_id, signer_id, signature_method, verification_method,
+        signature_storage_key, presented_document_hash, ip_address_encrypted,
+        user_agent, consent_text_version, submission_hash, signed_at)
+       VALUES (?, ?, ?, ?, 'email_link', ?, ?, ?, ?, ?, ?, ?)`,
       [
         eventId,
         session.envelope_id,
@@ -540,6 +543,7 @@ export async function submitSignature(
         presentedHash: input.presentedHash,
         documentHash: sha256(pdf),
         signatureMethod: input.method,
+        verificationMethod: 'email_link',
         consentVersion: CONSENT_VERSION,
         status,
       },
